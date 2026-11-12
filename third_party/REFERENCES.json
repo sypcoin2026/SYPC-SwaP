@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "created": "2026-11-12",
+  "purpose": "Exact source snapshots for offline study ONLY; no contracts compiled, ported or deployed.",
+  "files": [
+    {
+      "upstream": "ergoplatform/ergo-contracts",
+      "revision": "17ed58b39460e5520de56f615936d918603a3b9e",
+      "license_declared": "CC0-1.0",
+      "upstream_path": "LICENSE",
+      "copy_path": "third_party/ergo-contracts/LICENSE",
+      "github_blob_sha1": "0e259d42c996742e9e3cba14c677129b2c1b6311",
+      "executable": false
+    },
+    {
+      "upstream": "ergoplatform/ergo-contracts",
+      "revision": "17ed58b39460e5520de56f615936d918603a3b9e",
+      "license_declared": "CC0-1.0",
+      "upstream_path": "verified-contracts/src/main/scala/org/ergoplatform/contracts/AssetsAtomicExchange.scala",
+      "copy_path": "third_party/ergo-contracts/verified-contracts/src/main/scala/org/ergoplatform/contracts/AssetsAtomicExchange.scala",
+      "github_blob_sha1": "03214d52d9e519843f75abe0cc6e46f33dd99d23",
+      "executable": false
+    },
+    {
+      "upstream": "ergoplatform/ergo-contracts",
+      "revision": "17ed58b39460e5520de56f615936d918603a3b9e",
+      "license_declared": "CC0-1.0",
+      "upstream_path": "contracts/src/main/scala/org/ergoplatform/contracts/DexLimitOrder.scala",
+      "copy_path": "third_party/ergo-contracts/contracts/src/main/scala/org/ergoplatform/contracts/DexLimitOrder.scala",
+      "github_blob_sha1": "7915157f97d1686c786992875ece5ad8004f847f",
+      "executable": false
+    },
+    {
+      "upstream": "spectrum-finance/ergo-dex",
+      "revision": "8fe94e1f8b4e1ab9402fca6fbc3955e3ad1415f7",
+      "license_declared": "CC0-1.0",
+      "upstream_path": "LICENSE",
+      "copy_path": "third_party/spectrum-ergo-dex/LICENSE",
+      "github_blob_sha1": "1625c1793607996fcfc46420e8aa2f3d2b7efd1e",
+      "executable": false
+    },
+    {
+      "upstream": "spectrum-finance/ergo-dex",
+      "revision": "8fe94e1f8b4e1ab9402fca6fbc3955e3ad1415f7",
+      "license_declared": "CC0-1.0",
+      "upstream_path": "contracts/amm/cfmm/v1/n2t/Pool.sc",
+      "copy_path": "third_party/spectrum-ergo-dex/contracts/amm/cfmm/v1/n2t/Pool.sc",
+      "github_blob_sha1": "16d7040a638ed75d448bb25f1ee8a216ec1afd8b",
+      "executable": false
+    },
+    {
+      "upstream": "spectrum-finance/ergo-dex",
+      "revision": "8fe94e1f8b4e1ab9402fca6fbc3955e3ad1415f7",
+      "license_declared": "CC0-1.0",
+      "upstream_path": "contracts/amm/cfmm/v1/t2t/Pool.sc",
+      "copy_path": "third_party/spectrum-ergo-dex/contracts/amm/cfmm/v1/t2t/Pool.sc",
+      "github_blob_sha1": "cc411d95cc29baec29d8bb18d96cf92092d4d0f0",
+      "executable": false
+    },
+    {
+      "upstream": "spectrum-finance/ergo-dex",
+      "revision": "8fe94e1f8b4e1ab9402fca6fbc3955e3ad1415f7",
+      "license_declared": "CC0-1.0",
+      "upstream_path": "contracts/amm/cfmm/v3/n2t/SwapBuy.sc",
+      "copy_path": "third_party/spectrum-ergo-dex/contracts/amm/cfmm/v3/n2t/SwapBuy.sc",
+      "github_blob_sha1": "f8ae840d026d4dd505dc5982a751ec82d657380d",
+      "executable": false
+    },
+    {
+      "upstream": "spectrum-finance/ergo-dex",
+      "revision": "8fe94e1f8b4e1ab9402fca6fbc3955e3ad1415f7",
+      "license_declared": "CC0-1.0",
+      "upstream_path": "contracts/amm/cfmm/v3/n2t/SwapSell.sc",
+      "copy_path": "third_party/spectrum-ergo-dex/contracts/amm/cfmm/v3/n2t/SwapSell.sc",
+      "github_blob_sha1": "8f2f9873b40238175de09581f71aa3b20374256f",
+      "executable": false
+    }
+  ]
+}

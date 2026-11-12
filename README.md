@@ -29,7 +29,17 @@ SYPC Swap es un proyecto independiente para estudiar, adaptar y reforzar tecnolo
 | [Ergo Contracts](https://github.com/ergoplatform/ergo-contracts) | Intercambio de activos y propiedades con verificación formal | En estudio; licencia CC0-1.0 del repositorio |
 | [Ergo / ergo-dex](https://github.com/ergoplatform/ergo-dex) | DEX de órdenes y arquitectura eUTXO | En estudio; licencia MIT del repositorio |
 
-La compatibilidad de esos proyectos con SYPC **no está demostrada** y requiere validaciones de compatibilidad, pruebas nativas y revisión de código y licencias por componente. No se ha copiado código de terceros a este repositorio.
+La compatibilidad de esos proyectos con SYPC **no está demostrada** y requiere validaciones de compatibilidad, pruebas nativas y revisión de código y licencias por componente. Se han preservado ocho archivos de código y licencias originales, sin modificaciones, en [`third_party/`](third_party/README.md). Son referencias de investigación: **no están integradas con SYPC ni desplegadas**.
+
+## Pruebas offline (no comprueban contratos)
+
+```bash
+python3 tools/verify_sources.py
+python3 tools/verify_vendored.py
+python3 -m unittest discover -s tests -v
+```
+
+El proyecto incluye un **modelo matemático de AMM**, no un exchange ejecutable ni una cotización de mercado. La [evidencia de fase 1](docs/EVIDENCE_PHASE1_20261112.md) distingue los niveles de prueba.
 
 ## Hoja de ruta
 
@@ -41,9 +51,9 @@ La compatibilidad de esos proyectos con SYPC **no está demostrada** y requiere 
 
 ## Seguridad y trabajo
 
-Los contratos, el backend ejecutor, la UI y los endpoints públicos todavía **no existen** en este proyecto. No se aceptan depósitos, no hay pools ni tokens SYPC Swap.
+Los contratos **adaptados a SYPC**, el backend ejecutor, la UI y los endpoints públicos todavía **no existen** en este proyecto. No se aceptan depósitos, no hay pools ni tokens SYPC Swap.
 
-Antes de importar código ajeno, revisar [documentación de procedencia](docs/UPSTREAM.md), [arquitectura](docs/ARCHITECTURE.md), [compatibilidad](docs/COMPATIBILITY.md) y [modelo de amenazas](docs/SECURITY_MODEL.md) una vez incorporados a la rama de trabajo.
+Antes de integrar código ajeno, revisar [documentación de procedencia](docs/UPSTREAM.md), [arquitectura](docs/ARCHITECTURE.md), [compatibilidad](docs/COMPATIBILITY.md) y [modelo de amenazas](docs/SECURITY_MODEL.md) y la [revisión estática](docs/STATIC_COMPATIBILITY_REVIEW_20261112.md).
 
 **Nunca publicar** wallet data, claves, frases semilla, credenciales, volcados de bases de datos, IPs internas, ficheros .env, logs privados ni datos de red experimental.
 

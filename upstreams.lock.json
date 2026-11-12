@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "snapshot_date": "2026-11-12",
+  "notice": "Reference commits only. Selected original files copied as reference snapshots in third_party; imported=false means not integrated as executable SYPC contracts. No adaptation, deployment, audit or SYPC compatibility demonstrated.",
+  "sources": [
+    {
+      "id": "spectrum-ergo-dex",
+      "url": "https://github.com/spectrum-finance/ergo-dex",
+      "commit": "8fe94e1f8b4e1ab9402fca6fbc3955e3ad1415f7",
+      "license_declared": "CC0-1.0",
+      "role": "AMM, pool and off-chain execution research",
+      "imported": false
+    },
+    {
+      "id": "ergoplatform-ergo-contracts",
+      "url": "https://github.com/ergoplatform/ergo-contracts",
+      "commit": "17ed58b39460e5520de56f615936d918603a3b9e",
+      "license_declared": "CC0-1.0",
+      "role": "Atomic exchange and contract verification research",
+      "imported": false
+    },
+    {
+      "id": "ergoplatform-ergo-dex",
+      "url": "https://github.com/ergoplatform/ergo-dex",
+      "commit": "50596a92a465f52904b5d8015e8ae0d62e414176",
+      "license_declared": "MIT",
+      "role": "Order-book and historic DEX research",
+      "imported": false
+    }
+  ]
+}
