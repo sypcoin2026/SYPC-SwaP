@@ -12,6 +12,8 @@ import sigmastate.basics.DLogProtocol.DLogProverInput
 import sigmastate.eval._
 import sigmastate.eval.Extensions._
 import sigmastate.interpreter.{ContextExtension, CryptoConstants, ProverResult}
+import sigmastate.serialization.ErgoTreeSerializer
+import java.security.MessageDigest
 import special.sigma.Header
 import special.collection._
 import scorex.util._
@@ -26,6 +28,12 @@ class AtomicSigmaInterpreterSpec extends AnyFlatSpec with Matchers {
   private val otherToken = Digest32 @@ Array.fill[Byte](32)(13)
 
   private def ownerTree = ErgoTree.fromProposition(SigmaPropConstant(ownerPk))
+
+  private def treeSha256(tree: ErgoTree): String = {
+    val bytes = ErgoTreeSerializer.DefaultSerializer.serializeErgoTree(tree)
+    val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
+    digest.map(b => "%02x".format(b & 0xff)).mkString
+  }
   private def attackerTree = ErgoTree.fromProposition(SigmaPropConstant(attackerPk))
 
   private def candidate(path: String, env: Map[String, Any]): ErgoTree = {
@@ -123,6 +131,20 @@ class AtomicSigmaInterpreterSpec extends AnyFlatSpec with Matchers {
       else if (choice == "wrong-index") IndexedSeq(paid)
       else IndexedSeq(box(1000000L, ownerTree), paid)
     })
+  }
+
+  "ErgoTree compiler fingerprint" should "print deterministic byte digests" in {
+    val buyHash = treeSha256(buyScript)
+    val sellHash = treeSha256(sellScript)
+    println("SYPC_ATOMIC_BUY_SHA256=" + buyHash)
+    println("SYPC_ATOMIC_SELL_SHA256=" + sellHash)
+    buyHash.length shouldBe 64
+    sellHash.length shouldBe 64
+    (1 to 3).foreach { _ =>
+      treeSha256(buyScript) shouldBe buyHash
+      treeSha256(sellScript) shouldBe sellHash
+    }
+    buyHash should not be sellHash
   }
 
   "AtomicBuy with Sigma interpreter" should "accept correct unsigned matching outputs" in {
