@@ -37,6 +37,16 @@
 - [ ] Interpretación con el binario y reglas de consenso **SYPC**; todavía no demostrada.
 - [ ] Validez de la transacción completa, comisiones, conservación, doble gasto, cancelación con firma y recuperación ante reorganización de bloques.
 
+## P1.6 — Cancelación verificable y recuperabilidad [solo laboratorio]
+
+- [x] Probar con firmas Sigma la rama heredada de cancelación; riesgo de destinatarios no garantizados confirmado (`8/8` pruebas).
+- [x] Primer contrato de devolución exacta, comisión acotada y firma del propietario: `17/17` PASS en dos Ubuntu.
+- [x] Variante con UTXO patrocinadora nativa del mismo propietario y selección de inputs sin indexado opcional: `27/27` PASS.
+- [x] Firma y verificación de **ambas** entradas sobre `messageToSign` idéntico en transacción sintética: `29/29` PASS en dos Ubuntu.
+- [ ] **P0**: demostrar validez global de una tx SYPC, firmas múltiples, costes, tokens reales y reorgs mediante nodos validadores independientes.
+- [ ] **P0**: demostrar que ningún estado permitido impide cancelar/reembolsar por falta de native-value mínimo y que no se bloquean fondos.
+- [ ] **P0**: auditoría externa, pruebas formales y protección de `main`; nada de despliegue público todavía.
+
 ## P2 — Intercambio atómico [pendiente]
 
 - [ ] Seleccionar contrato origen y preparar port aislado con licencia/procedencia.

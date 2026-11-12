@@ -31,7 +31,7 @@ Un operador externo o indexador no debe poder elegir arbitrariamente el script d
 
 ## Limitaciones de extrema importancia
 
-**L1 — Esta prueba no firma el patrocinador.** `ErgoLikeInterpreter.verify` evalúa el script de la orden de forma individual. Que el contexto contenga dos entradas NO demuestra que la transacción completa satisfaga la prueba de gasto de la segunda entrada. El nodo real debe verificar **ambos** scripts y las reglas globales.
+**L1 — Las dos firmas ya se han probado en el laboratorio, pero no la validez de consenso.** La última prueba crea una transacción sintética, firma el gasto de la orden y de la UTXO patrocinadora sobre los mismos `messageToSign`, y verifica ambos scripts con `ErgoLikeInterpreter.verify`. También rechaza firma ajena y cambio de bytes después de firmar. **No se han ejecutado los validadores globales de un nodo SYPC**, ni comprobado el estado UTXO verdadero o el coste de una tx real. El nodo real debe verificar ambos scripts y las reglas globales.
 
 **L2 — Sin UTXO nativa libre, la cancelación puede seguir bloqueada.** El diseño mejora la recuperabilidad cuando el propietario tiene otra caja con fondos para comisión; no garantiza que siempre la tenga ni que la orden sea válida con un valor nativo demasiado bajo. Una política de reservas y preflight de la cartera sigue siendo imprescindible.
 
@@ -51,3 +51,19 @@ Un operador externo o indexador no debe poder elegir arbitrariamente el script d
 - En todas las pruebas: únicamente datos sintéticos; sin transacciones reales ni fondos.
 
 **Decisión vigente:** mantenerlo como experimento, exigir validación nativa SYPC y auditoría externa, y NO adoptar como contrato de producción hasta demostrar también las reglas de recuperación.
+
+## Resultados comprobados en GitHub Actions
+
+- [Lab original firmado: 8/8 PASS en ambos Ubuntu](https://github.com/sypcoin2026/SYPC-SwaP/actions/runs/43272988295): se comprueba que la firma del propietario autoriza la ruta heredada incluso si el pago se envía a otra dirección. La firma ajena y el mensaje adulterado se rechazan.
+- [Refund guard de una entrada: 17/17 PASS en ambos Ubuntu](https://github.com/sypcoin2026/SYPC-SwaP/actions/runs/43273909351): la cancelación protegida rechaza destinos, tokens, comisiones y salidas maliciosas.
+- [Sponsor guard: 27/27 PASS en ambos Ubuntu](https://github.com/sypcoin2026/SYPC-SwaP/actions/runs/43275208073): después de corregir tres fallos del primer prototipo, la selección segura de la UTXO adicional preserva las rutas de una y dos entradas y las compras/ventas normales.
+- [Dos firmas sobre transacción sintética: 29/29 PASS en ambos Ubuntu](https://github.com/sypcoin2026/SYPC-SwaP/actions/runs/43275928378): las firmas del contrato de orden y de la segunda UTXO se verifican con el mismo mensaje serializado. Se rechaza firma ajena y alteración posterior de los bytes del mensaje.
+
+Los casos de laboratorio se ejecutaron con JDK 11, Spectrum/Sigma 4.0.5, fuentes originales fijadas por commit, acciones GitHub fijadas por SHA y permisos de sólo lectura. **Estos resultados no deben sumarse como pruebas independientes de seguridad del consenso: son diferentes etapas de validación de software experimental.**
+
+### Dos fallos que no hemos ocultado
+
+1. La primera versión patrocinada fallaba en algunas rutas de una entrada y venta normal. Se resolvió eliminando accesos directos a `INPUTS(1)` y utilizando una colección de entradas extra verificadas. Los rechazos quedaron visibles en GitHub Actions.
+2. Aunque ahora se comprueban las firmas de ambas entradas, todavía no hay una prueba end-to-end de UTXO real, coste, validadores de transacciones, confirmaciones o reorganización en SYPC.
+
+**Decisión de diseño:** seguir investigando antes de permitir fondos; la prueba de recuperabilidad es tan obligatoria como la de no-custodia.
