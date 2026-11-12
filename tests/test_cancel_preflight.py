@@ -131,6 +131,16 @@ class StrictCancellationTests(unittest.TestCase):
         with self.assertRaisesRegex(CancelPreflightRejected, "unknown"):
             check(altered)
 
+    def test_reject_duplicate_token_entries_in_one_refund_box(self):
+        # Even if sums match, a single UTXO containing duplicate token IDs
+        # must not pass our restrictive cancellation template.
+        altered = replace(good_plan(), outputs=(
+            SyntheticOutput(OWNER, 975, ((TOKEN, 11), (TOKEN, 9))),
+            SyntheticOutput(FEE, 25),
+        ))
+        with self.assertRaisesRegex(CancelPreflightRejected, "duplicate token"):
+            check(altered)
+
     def test_reject_fee_script_equal_to_owner_script(self):
         with self.assertRaisesRegex(CancelPreflightRejected, "distinct"):
             check(fee_script=OWNER)
