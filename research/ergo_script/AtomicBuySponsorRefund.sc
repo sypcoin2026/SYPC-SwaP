@@ -13,38 +13,39 @@
     OUTPUTS(0).R4[Coll[Byte]].get == SELF.id &&
     OUTPUTS(0).propositionBytes == BuyerPk.propBytes
 
+  // Avoid INPUTS(1) indexing when an optional sponsor is absent.
+  // Using a filtered collection also keeps the normal fill path evaluable.
+  val otherInputs = INPUTS.filter { (b: Box) => b.id != SELF.id }
+  val sponsorsValid =
+    otherInputs.size <= 1 &&
+    INPUTS.size == otherInputs.size + 1 &&
+    otherInputs.forall { (b: Box) =>
+      b.tokens.size == 0 &&
+      b.propositionBytes == BuyerPk.propBytes
+    }
+  val extraNative = otherInputs.fold(0.toBigInt, { (sum: BigInt, b: Box) =>
+    sum + b.value.toBigInt
+  })
+
   val safeCancel =
-    (INPUTS.size == 1 || INPUTS.size == 2) &&
-    OUTPUTS.size == 2 &&
-    INPUTS(0).id == SELF.id && {
+    INPUTS.size > 0 &&
+    INPUTS(0).id == SELF.id &&
+    OUTPUTS.size == 2 && {
       val refund = OUTPUTS(0)
       val fee = OUTPUTS(1)
-
-      val sponsorAllowed =
-        if (INPUTS.size == 1) true
-        else {
-          val extra = INPUTS(1)
-          extra.id != SELF.id &&
-          extra.tokens.size == 0 &&
-          extra.propositionBytes == BuyerPk.propBytes
-        }
-      val sponsorValue =
-        if (INPUTS.size == 2) INPUTS(1).value.toBigInt
-        else 0.toBigInt
-
-      val correctNative =
+      val nativeConserved =
         refund.value > 0L &&
         fee.value > 0L &&
         fee.value <= MaxCancelFee &&
         refund.value.toBigInt + fee.value.toBigInt ==
-          SELF.value.toBigInt + sponsorValue
-
+          SELF.value.toBigInt + extraNative
       val fullOwnRefund =
-        if (INPUTS.size == 2) refund.value.toBigInt >= SELF.value.toBigInt
+        if (otherInputs.size == 1)
+          refund.value.toBigInt >= SELF.value.toBigInt
         else true
 
-      sponsorAllowed &&
-      correctNative &&
+      sponsorsValid &&
+      nativeConserved &&
       fullOwnRefund &&
       refund.propositionBytes == BuyerPk.propBytes &&
       fee.propositionBytes == FeePropBytes &&
