@@ -13,6 +13,7 @@ from tools import lan_consensus_gate as gate
 NOW = datetime(2026, 11, 12, 20, 0, tzinfo=timezone.utc)
 HEADER = "a" * 64
 ROOT = "b" * 64
+GENESIS = "c" * 64
 
 
 def snapshot(role="producer", **changes):
@@ -21,6 +22,7 @@ def snapshot(role="producer", **changes):
         "role": role,
         "captured_at_utc": (NOW - timedelta(seconds=15)).isoformat(),
         "fullHeight": 377,
+        "genesisBlockId": GENESIS,
         "bestFullHeaderId": HEADER,
         "stateRoot": ROOT,
         "connected_peers": 1,
@@ -36,6 +38,10 @@ class LanReadonlyGateTests(unittest.TestCase):
         self.assertEqual(result["status"], "PASS_READONLY_TIP_CONSISTENCY_ONLY")
         self.assertEqual(result["fullHeight"], 377)
         self.assertTrue(result["requires_separate_genesis_firewall_and_tx_validation"])
+
+    def test_mismatched_genesis_is_rejected(self):
+        with self.assertRaisesRegex(gate.GateError, "genesisBlockId"):
+            gate.compare(snapshot(), snapshot("validator", genesisBlockId="d" * 64), now=NOW)
 
     def test_mismatched_full_height_is_rejected(self):
         with self.assertRaisesRegex(gate.GateError, "fullHeight"):
@@ -93,7 +99,8 @@ class LanReadonlyGateTests(unittest.TestCase):
 
     def test_capture_reads_only_local_info_and_peers(self):
         info = {
-            "fullHeight": 377, "bestFullHeaderId": HEADER, "stateRoot": ROOT,
+            "fullHeight": 377, "genesisBlockId": GENESIS,
+            "bestFullHeaderId": HEADER, "stateRoot": ROOT,
             "isMining": False,
         }
         calls = []
@@ -105,12 +112,13 @@ class LanReadonlyGateTests(unittest.TestCase):
         self.assertEqual(calls, ["/info", "/peers/connected"])
         self.assertEqual(s["connected_peers"], 1)
         self.assertEqual(s["fullHeight"], 377)
+        self.assertEqual(s["genesisBlockId"], GENESIS)
         self.assertNotIn("placeholder", json.dumps(s))
 
     def test_capture_rejects_enabled_validator_mining(self):
         with patch.object(gate, "_get_local_json", side_effect=[
-            {"fullHeight": 377, "bestFullHeaderId": HEADER,
-             "stateRoot": ROOT, "isMining": True},
+            {"fullHeight": 377, "genesisBlockId": GENESIS,
+             "bestFullHeaderId": HEADER, "stateRoot": ROOT, "isMining": True},
             [],
         ]):
             with self.assertRaises(gate.GateError):
