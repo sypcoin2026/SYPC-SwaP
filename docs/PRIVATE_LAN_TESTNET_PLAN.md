@@ -13,7 +13,7 @@ Relacionado con: [compatibilidad #2](https://github.com/sypcoin2026/SYPC-SwaP/is
 | Etapa | Entorno | Operación permitida | Evidencia y salida |
 | --- | --- | --- | --- |
 | 0 | Código y CI offline | Hashes de contratos, firma Sigma sintética, fuzzing, preflight | Continuar aislados de nodos reales |
-| 1 | **Red privada existente, SOLO lectura** | Consultar punta íntegra, raíz, pares y diferencia entre productor/receptor | Dos snapshots con SHA-256 y coincidencia de `genesisBlockId`, `fullHeight`, `bestFullHeaderId` y `stateRoot` |
+| 1 | **Red privada existente, SOLO lectura** | Consultar punta íntegra, raíz, pares y diferencia entre productor/receptor | Dos snapshots con SHA-256 y coincidencia de `genesisBlockId`, `fullHeight`, `bestFullHeaderId`, `stateVersion` y `stateRoot` |
 | 2 | **Cadena laboratorio descartable nueva** | Emitir activos de prueba, firmar con claves desechables, transacción completa y cancelación, reorg y fallos | PASS/FAIL documentados de validación de consenso |
 | 3 | Red privada actual, en entorno aislado y con autorización expresa | Solo pruebas limitadas de contratos con activos específicamente destinados al ensayo, cuando existan UTXO gastables y recuperación validada | Evidencia de aceptación en productor y validador, sin operar con tesorerías |
 | 4 | Mainnet pública | **PROHIBIDO** mientras estén abiertos bloqueos #13, #8, auditoría y protección de ramas | Decisión explícita tras auditoría |
@@ -46,7 +46,11 @@ Herramienta: `tools/lan_consensus_gate.py`. Python estándar, sin dependencias e
 
 El guard crea snapshots nuevos con modo `0600`, nunca sobrescribe un archivo existente y entrega SHA-256. Si el nodo está parado o su API no responde, el guard falla sin iniciar nada. Si la API actual usa otros nombres de campo, el guard **falla** en lugar de adivinar o degradar su seguridad; adaptar la herramienta contra una respuesta redactada y verificada.
 
-`PASS_READONLY_TIP_CONSISTENCY_ONLY` solo prueba que ambas respuestas locales coinciden en **ID de génesis reportada, punta completa y raíz de estado al instante capturado**. NO prueba que las dos redes tengan la misma génesis auténtica, que los nodos se validen de forma criptográficamente independiente, que no haya exposición al exterior, ni que un solo contrato del DEX funcione.
+`PASS_READONLY_TIP_CONSISTENCY_ONLY` solo prueba que ambas respuestas locales coinciden en **ID de génesis reportada, punta completa, versión del estado aplicado y raíz de estado al instante capturado**. NO prueba que las dos redes tengan la misma génesis auténtica, que los nodos se validen de forma criptográficamente independiente, que no haya exposición al exterior, ni que un solo contrato del DEX funcione.
+
+### Compatibilidad y seguridad de la captura
+
+El comprobador rechaza que `stateVersion` (bloque cuyo estado está aplicado) sea distinto de `bestFullHeaderId`, aunque las alturas y raíces informadas por dos procesos coincidan. Esta propiedad sigue sin autenticar la génesis ni los binarios de los nodos. Para evitar lecturas arbitrarias o excesivas, sólo acepta snapshots de archivos regulares, con lectura acotada y sin seguir enlaces simbólicos en Linux. El formato de snapshot ahora es `SYPC_PRIVATE_LAN_READONLY_V2`; no se deben reutilizar capturas V1 como si fueran equivalentes.
 
 ## 4. Requisitos de la siguiente prueba de DEX en cadena descartable
 
