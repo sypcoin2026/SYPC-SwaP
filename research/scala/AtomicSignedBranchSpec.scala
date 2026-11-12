@@ -72,7 +72,7 @@ class AtomicSignedBranchSpec extends AnyFlatSpec with Matchers {
     implicit val ir: IRContext = new RuntimeIRContext
     val prover = new ErgoLikeInterpreter with ProverInterpreter {
       override type CTX = ErgoLikeContext
-      override val secrets: Seq[SigmaProtocolPrivateInput[_, _]] = Seq(signer)
+      override val secrets = Seq(signer)
     }
     val verifier = new ErgoLikeInterpreter { override type CTX = ErgoLikeContext }
     val empty = verifier.verify(script, ctx, ProverResult.empty, msg)
