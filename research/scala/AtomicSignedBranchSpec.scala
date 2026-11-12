@@ -49,7 +49,17 @@ class AtomicSignedBranchSpec extends AnyFlatSpec with Matchers {
     // Only one synthetic recipient output, intentionally missing the required
     // buy/sell fulfillment. The owner-signature branch must still reduce to
     // ownerPk. This models UI/deception risk, not an attacker forging proof.
-    val outputs = IndexedSeq(new ErgoBoxCandidate(1950000L, recipient, 0))
+    val outputs = IndexedSeq(
+      new ErgoBoxCandidate(1950000L, recipient, 0),
+      // A second output prevents the legacy seller from evaluating an
+      // out-of-range OUTPUTS(1). It is intentionally underpaid and carries
+      // R4 so fill remains invalid and ONLY the owner's real signature can
+      // authorize the spend. No funds or consensus are involved.
+      new ErgoBoxCandidate(
+        1L, recipient, 0,
+        additionalRegisters = Map(ErgoBox.R4 -> ByteArrayConstant(self.id))
+      )
+    )
     val tx = ErgoLikeTransaction(IndexedSeq(Input(self.id, ProverResult.empty)), outputs)
     val empty = CostingSigmaDslBuilder.Colls.emptyColl[Byte]
     val preHeader = CPreHeader(
