@@ -295,14 +295,13 @@ class SponsorRefundSignatureSpec extends AnyFlatSpec with Matchers {
 
     unsignedCtx.boxesToSpend.map(b => BigInt(b.value)).sum shouldBe
       proposal.outputCandidates.map(b => BigInt(b.value)).sum
-    // Explicitly check the transferred token ID BYTES and amount.
-    // Digest32 wraps Array[Byte], whose regular equality is by reference.
+    // ErgoBox.tokens in this harness is a value-based Map[ModifierId,Long],
+    // not the Coll[(Digest32,Long)] seen inside ErgoScript. Compare maps:
+    // this checks exact asset identities and quantities without array aliasing.
     val spentTokens = unsignedCtx.boxesToSpend(0).tokens
     val receivedTokens = proposal.outputCandidates(0).tokens
     spentTokens.size shouldBe 1
-    receivedTokens.size shouldBe 1
-    java.util.Arrays.equals(spentTokens(0)._1, receivedTokens(0)._1) shouldBe true
-    spentTokens(0)._2 shouldBe receivedTokens(0)._2
+    spentTokens shouldBe receivedTokens
     unsignedCtx.boxesToSpend(1).tokens.size shouldBe 0
     proposal.outputCandidates(1).tokens.size shouldBe 0
 
