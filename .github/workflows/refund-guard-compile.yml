@@ -7,6 +7,7 @@ on:
     paths:
       - 'research/ergo_script/**'
       - 'research/scala/RefundGuardCompileSpec.scala'
+      - 'research/scala/RefundGuardedSignatureSpec.scala'
       - '.github/workflows/refund-guard-compile.yml'
 
 permissions:
@@ -48,9 +49,10 @@ jobs:
           cp "$GITHUB_WORKSPACE/research/ergo_script/AtomicBuyRefundGuard.sc" research/ergo_script/
           cp "$GITHUB_WORKSPACE/research/ergo_script/AtomicSellRefundGuard.sc" research/ergo_script/
           cp "$GITHUB_WORKSPACE/research/scala/RefundGuardCompileSpec.scala" src/test/scala/io/ergodex/core/
+          cp "$GITHUB_WORKSPACE/research/scala/RefundGuardedSignatureSpec.scala" src/test/scala/io/ergodex/core/
       - name: Compile experimental scripts and bind fee constraints
         shell: bash
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/spectrum"
-          sbt -batch 'testOnly *RefundGuardCompileSpec'
+          sbt -batch 'testOnly *RefundGuardCompileSpec *RefundGuardedSignatureSpec'
