@@ -34,5 +34,7 @@ jobs:
         run: python tools/verify_vendored.py
       - name: Enforce offline package boundary
         run: python tools/audit_runtime_boundary.py
+      - name: Audit CI action pins and permissions
+        run: python tools/audit_ci_workflows.py
       - name: Offline unit tests (including negative cases)
         run: python -m unittest discover -s tests -v
