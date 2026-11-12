@@ -170,7 +170,7 @@ def compare(producer: dict, validator: dict, *, expected_genesis_id: str, now=No
     if producer["role"] != "producer" or validator["role"] != "validator":
         raise GateError("Wrong node roles")
     if producer["genesisBlockId"] != expected_genesis_id or validator["genesisBlockId"] != expected_genesis_id:
-        raise GateError("Reported genesis does not match independently pinned genesis")
+        raise GateError("Reported genesisBlockId does not match independently pinned genesis")
     if abs((a_time - b_time).total_seconds()) > MAX_CAPTURE_SKEW_SECONDS:
         raise GateError("Snapshots not collected close enough in time")
     if producer["connected_peers"] < 1 or validator["connected_peers"] < 1:
