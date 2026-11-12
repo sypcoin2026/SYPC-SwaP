@@ -54,6 +54,8 @@ class SponsorRefundSignatureSpec extends AnyFlatSpec with Matchers {
       )
       else common ++ Map[String, Any](
         "SellerPk" -> ownerSk.publicImage,
+        "SellTokenId" -> Array.fill[Byte](32)(12),
+        "SellTokenAmount" -> 10L,
         "MinNativeAmount" -> 1000L
       )
     platform.compile(source, env)
@@ -61,7 +63,14 @@ class SponsorRefundSignatureSpec extends AnyFlatSpec with Matchers {
 
   private def context(side: String, scenario: String): (ErgoTree, ErgoLikeContext) = {
     val tree = script(side)
-    val locked = if (side == "sell") tokens(tokenId, 10L) else noTokens
+    val locked = if (side == "sell") scenario match {
+      case "fill-wrong-token" => tokens(otherToken, 10L)
+      case "fill-underfilled" => tokens(tokenId, 9L)
+      case "fill-overfilled" => tokens(tokenId, 11L)
+      case "fill-empty-inventory" => noTokens
+      case "fill-extra-inventory" => Array((tokenId, 10L), (otherToken, 1L)).toColl
+      case _ => tokens(tokenId, 10L)
+    } else noTokens
     val self = new ErgoBoxCandidate(2000000L, tree, 0, locked)
       .toBox(ErgoBox.allZerosModifierId, 0.toShort)
 
@@ -106,11 +115,16 @@ class SponsorRefundSignatureSpec extends AnyFlatSpec with Matchers {
           1000000L, ownerTree, 0, tokens(tokenId, 100L),
           Map(ErgoBox.R4 -> ByteArrayConstant(self.id))
         ))
-      case "fill" =>
+      case name if side == "sell" && name.startsWith("fill") =>
+        // The old contract accepted 1,000 units even though SELF locked 2M.
+        // New sell candidate must give back SELF.value PLUS 1,000 price.
+        val payout = if (name == "fill-underpaid-native") 2000999L else 2001000L
+        val payoutTokens = if (name == "fill-tokens-in-payout")
+          tokens(otherToken, 1L) else noTokens
         IndexedSeq(
           new ErgoBoxCandidate(1000000L, thirdTree, 0),
           new ErgoBoxCandidate(
-            1000L, ownerTree, 0, noTokens,
+            payout, ownerTree, 0, payoutTokens,
             Map(ErgoBox.R4 -> ByteArrayConstant(self.id))
           )
         )
@@ -257,6 +271,20 @@ class SponsorRefundSignatureSpec extends AnyFlatSpec with Matchers {
   }
   it should "preserve unsigned successful fill" in {
     authorized("sell", "fill", None) shouldBe true
+  }
+
+  "Asset-bound sell fill" should "reject wrong token and non-exact inventory" in {
+    authorized("sell", "fill-wrong-token", None) shouldBe false
+    authorized("sell", "fill-underfilled", None) shouldBe false
+    authorized("sell", "fill-overfilled", None) shouldBe false
+    authorized("sell", "fill-empty-inventory", None) shouldBe false
+    authorized("sell", "fill-extra-inventory", None) shouldBe false
+  }
+  it should "reject a native payout below box collateral plus sale price" in {
+    authorized("sell", "fill-underpaid-native", None) shouldBe false
+  }
+  it should "reject unrelated tokens in seller native payout" in {
+    authorized("sell", "fill-tokens-in-payout", None) shouldBe false
   }
 
   "Sponsored buy cancellation" should "refund locked value and change from owner fee sponsor" in {
