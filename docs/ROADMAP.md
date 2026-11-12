@@ -5,6 +5,8 @@
 - [x] Repositorio público separado del núcleo.
 - [x] Catálogo de referencias Ergo y Spectrum (commits fijos, licencias).
 - [x] Propuesta de arquitectura nativa sin puentes y matriz de compatibilidad.
+- [x] Ocho archivos upstream preservados con sus licencias e integridad comprobada.
+- [x] Modelo aritmético AMM offline y comprobador de snapshots: 25 tests sintéticos/aritméticos PASS.
 - [ ] Revisión del código/contratos específicos y de sus dependencias.
 - [ ] Decidir licencia propia del proyecto antes de publicar código nuevo reutilizable.
 

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "snapshot_date": "2026-11-12",
-  "notice": "Reference commits only. Not imported, adapted, audited or deemed compatible with SYPC.",
+  "notice": "Reference commits only. Selected original files copied as reference snapshots in third_party; imported=false means not integrated as executable SYPC contracts. No adaptation, deployment, audit or SYPC compatibility demonstrated.",
   "sources": [
     {
       "id": "spectrum-ergo-dex",

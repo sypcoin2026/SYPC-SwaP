@@ -1,6 +1,6 @@
 # Matriz de compatibilidad SYPC / DEX
 
-**Estado: TODO PENDIENTE DE VERIFICACIÓN.** SYPC deriva de Ergo, pero no basta el origen del código para afirmar que los contratos heredados funcionarán.
+**Estado: SIN COMPATIBILIDAD EJECUTADA NI VALIDADA.** La lectura estática del código SYPC es favorable, pero ninguna prueba ha ejecutado contratos en la red privada. SYPC deriva de Ergo, pero no basta el origen del código para afirmar que los contratos heredados funcionarán.
 
 | Capacidad requerida | Cómo verificarla | Estado |
 | --- | --- | --- |
@@ -16,6 +16,10 @@
 | Reorganizaciones y mempool | Simular tx conflictivas, reorg y expiración/cancelación de órdenes | PENDIENTE |
 | Compatibilidad de toolchain (Java/Scala/sbt) | Compilar dependencias fijadas offline, registrar commits, reproducibilidad | PENDIENTE |
 | Windows/Linux y wallet local | Pruebas separadas para firmas nativas y experiencia segura de usuario | PENDIENTE |
+
+## Lectura de código (NO acredita compatibilidad)
+
+En `sypcoin-core`, rama `work/linux-node-lan-20261111`, commit `72a6a9a3c8add39c7f0bb978819b013cc4a0404b`, se observan `ErgoTransaction`, `ErgoInterpreter.verify` y `verifyAssets`. Véase [análisis estático](STATIC_COMPATIBILITY_REVIEW_20261112.md). Se requiere compilar y ejecutar contratos en un nodo SYPC real para marcar PASS.
 
 ## Evidencia mínima para marcar PASS
 
