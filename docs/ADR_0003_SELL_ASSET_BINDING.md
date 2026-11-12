@@ -34,8 +34,19 @@ La cancelación conserva la rama ya probada `SellerPk && safeCancel`, con devolu
 - Venta correcta sin firma del vendedor.
 - Rechazo por token equivocado, cantidad mayor/menor, sin tokens y activos extra.
 - Rechazo de pago inferior al precio **más** el nativo de `SELF`.
+- Rechazo de suma con colateral cercano a `Long.MaxValue` que desbordaría un `Long`.
 - Rechazo de tokens inesperados en el cobro del vendedor.
+- Prueba adicional de venta con **dos inputs sintéticos**, un input comprador firmado y salidas balanceadas en nativo y tokens; verificación independiente de ambos scripts en Sigma. Esto no comprueba fee de red ni estado UTXO real.
 - Repetición de pruebas de cancelación y patrocinio.
+
+## Huellas reproducibles de compilación (fixtures, NO direcciones reales)
+
+Verificadas con **la misma salida** en Ubuntu 22.04 y 24.04, JDK 11, Sigma 4.0.5:
+
+- BUY (fixture sintética): `543bbb47d4a979de5aa2c53623f029bc65105ea00f44091a24cc32ca2b5b3c48`
+- SELL (fixture sintética vinculada): `bedd2e46febfd259572a2d04285eef37254f4abfdc532df5ea74fc12ea5b6faa`
+
+Los valores están fijados en `SponsorRefundCompileSpec`. **Cambiar fuente o parámetros debe obligar a revisar y renovar deliberadamente el pin**; no reutilizar estas huellas como dirección de mainnet.
 
 ## Amenazas / requisitos pendientes
 
