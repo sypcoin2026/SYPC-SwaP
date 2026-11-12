@@ -1,0 +1,38 @@
+name: Offline security gates
+
+on:
+  push:
+    branches:
+      - main
+      - 'work/**'
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-security:
+    name: Offline validation / Python ${{ matrix.python }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.12', '3.13']
+    steps:
+      - name: Checkout exact reviewed revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Select Python (action pinned to commit)
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Verify pinned research sources metadata
+        run: python tools/verify_sources.py
+      - name: Verify byte-for-byte upstream source snapshots
+        run: python tools/verify_vendored.py
+      - name: Enforce offline package boundary
+        run: python tools/audit_runtime_boundary.py
+      - name: Offline unit tests (including negative cases)
+        run: python -m unittest discover -s tests -v
