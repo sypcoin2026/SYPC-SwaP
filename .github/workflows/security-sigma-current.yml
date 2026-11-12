@@ -70,7 +70,7 @@ jobs:
             RefundGuardCompileSpec:4 \
             RefundGuardedSignatureSpec:13 \
             SponsorRefundCompileSpec:6 \
-            SponsorRefundSignatureSpec:29; do
+            SponsorRefundSignatureSpec:30; do
             suite="${entry%%:*}"
             minimum="${entry##*:}"
             logfile="$RUNNER_TEMP/${suite}.log"
