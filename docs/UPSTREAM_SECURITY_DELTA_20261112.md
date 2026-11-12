@@ -63,6 +63,17 @@ Probar como invariantes independientes, además de los tests ya existentes:
 - Auditar dependencias y binarios sin asumir que herramientas antiguas con pruebas exitosas son seguras o mantenidas.
 - Repetir verificación formal con toolchain mantenido o documentar explícitamente el bloqueo (issue #8).
 
+## 2 bis. Controles que NO conviene copiar literalmente
+
+### Exposición de servicios y claves
+El [README de Lithos Client](https://github.com/Lithos-Protocol/Lithos-Client) indica que Stratum escucha en todas las interfaces salvo que se configure `stratum.bindAddress`. También describe acceso del cliente al keystore del nodo y a sus credenciales. **Para SYPC exigir: escucha loopback por defecto, firewall restrictivo, separación del proceso firmante, credenciales mínimas y ausencia de claves privadas en servicios de minería/DEX.** Las variables de entorno reducen la exposición accidental en archivos, pero no son por sí solas una barrera frente a procesos comprometidos.
+
+### Privacidad frente a APIs auxiliares
+La [FAQ de BasicSwap](https://basicswapdex.com/faq) reconoce consultas opcionales a servicios externos para cotizaciones, actualizaciones o explorers, así como el uso de nodos ligeros/remotos. Para nuestra wallet/DEX: mostrar claramente la procedencia y antigüedad del dato, no delegar decisiones críticas de consenso en una API pública y solicitar consentimiento antes de cualquier conexión auxiliar capaz de vincular actividad del usuario.
+
+### Aritmética y scripts antiguos
+El [DEX histórico de Ergo](https://github.com/ergoplatform/ergo-contracts/blob/17ed58b39460e5520de56f615936d918603a3b9e/contracts/src/main/scala/org/ergoplatform/contracts/DexLimitOrder.scala) utiliza operaciones `Long` para precios, cantidades y comisiones. **No se afirma que sea explotable**, pero en cualquier port debemos demostrar comportamiento seguro en los extremos de rango y no importar una multiplicación sin especificar cotas, desbordamientos y reglas de redondeo.
+
 ## 3. Separar problemas para no introducir riesgo nuevo
 
 1. **Core y minería:** auditoría separada. La seguridad de un DEX no protege una blockchain con hashrate insuficiente o validadores inconsistentes.
