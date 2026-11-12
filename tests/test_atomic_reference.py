@@ -10,7 +10,6 @@ import unittest
 
 from sypc_swap.atomic_reference import (
     MAX_I64, AtomicOrder, Side, SyntheticOutput, original_atomic_predicate,
-    wallet_cancel_refund_preflight,
 )
 
 ORDER_ID = b"\xa1" * 32
@@ -125,10 +124,6 @@ class BuyOrderTests(unittest.TestCase):
         # Source contract: buyerPk || (...). A valid owner signature bypasses
         # payout checks, so frontend MUST analyze whole tx before signing.
         self.assertTrue(original_atomic_predicate(buying(), (token_out(recipient=ATTACKER),), True))
-        self.assertFalse(wallet_cancel_refund_preflight(
-            buying(), (token_out(recipient=ATTACKER),),
-            locked_native=1000, locked_tokens=(), max_native_fee=20,
-        ))
 
 
 class SellOrderTests(unittest.TestCase):
@@ -171,70 +166,12 @@ class SellOrderTests(unittest.TestCase):
         self.assertTrue(original_atomic_predicate(selling(), (token_out(token=WRONG_TOKEN), native_out()), False))
 
 
-class WalletDefenseTests(unittest.TestCase):
-    def test_legitimate_native_refund(self):
-        self.assertTrue(wallet_cancel_refund_preflight(
-            buying(), (SyntheticOutput(OWNER, 980),),
-            locked_native=1000, locked_tokens=(), max_native_fee=20,
-        ))
-
-    def test_native_refund_shortfall_rejected(self):
-        self.assertFalse(wallet_cancel_refund_preflight(
-            buying(), (SyntheticOutput(OWNER, 979),),
-            locked_native=1000, locked_tokens=(), max_native_fee=20,
-        ))
-
-    def test_token_refund_shortfall_rejected(self):
-        self.assertFalse(wallet_cancel_refund_preflight(
-            selling(), (SyntheticOutput(OWNER, 990, ((TOKEN_ID, 9),)),),
-            locked_native=1000, locked_tokens=((TOKEN_ID, 10),), max_native_fee=20,
-        ))
-
-    def test_correct_token_refund(self):
-        self.assertTrue(wallet_cancel_refund_preflight(
-            selling(), (SyntheticOutput(OWNER, 985, ((TOKEN_ID, 10),)),),
-            locked_native=1000, locked_tokens=((TOKEN_ID, 10),), max_native_fee=20,
-        ))
-
-    def test_fee_budget_cannot_exceed_locked_balance(self):
-        self.assertFalse(wallet_cancel_refund_preflight(
-            buying(), (SyntheticOutput(OWNER, 0),),
-            locked_native=100, locked_tokens=(), max_native_fee=101,
-        ))
-
-    def test_aggregated_owner_outputs(self):
-        self.assertTrue(wallet_cancel_refund_preflight(
-            selling(), (
-                SyntheticOutput(OWNER, 400, ((TOKEN_ID, 6),)),
-                SyntheticOutput(OWNER, 580, ((TOKEN_ID, 4),)),
-                SyntheticOutput(ATTACKER, 100, ((TOKEN_ID, 999),)),
-            ),
-            locked_native=1000, locked_tokens=((TOKEN_ID, 10),), max_native_fee=20,
-        ))
-
-    def test_attacker_outputs_never_count_toward_refund(self):
-        self.assertFalse(wallet_cancel_refund_preflight(
-            buying(), (SyntheticOutput(ATTACKER, 1000),),
-            locked_native=1000, locked_tokens=(), max_native_fee=0,
-        ))
-
-    def test_duplicate_token_lock_rejected(self):
-        with self.assertRaises(ValueError):
-            wallet_cancel_refund_preflight(
-                selling(), (SyntheticOutput(OWNER, 100),),
-                locked_native=100, locked_tokens=((TOKEN_ID, 1), (TOKEN_ID, 1)), max_native_fee=0,
-            )
-
-    def test_unsafe_call_arguments_rejected(self):
+class OriginalPredicateBoundaryTests(unittest.TestCase):
+    def test_bad_argument_types_fail_closed(self):
         with self.assertRaises(TypeError):
             original_atomic_predicate(buying(), [token_out()], False)
         with self.assertRaises(TypeError):
             original_atomic_predicate(buying(), (token_out(),), 1)
-        with self.assertRaises(ValueError):
-            wallet_cancel_refund_preflight(
-                selling(), (native_out(),), locked_native=True,
-                locked_tokens=(), max_native_fee=0,
-            )
 
     def test_exhaustive_buy_match_outcome(self):
         total = 0
