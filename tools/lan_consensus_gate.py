@@ -204,13 +204,15 @@ def _read_snapshot(path):
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     fd = os.open(Path(path), flags)
-    with os.fdopen(fd, "rb") as source:
-        metadata = os.fstat(source.fileno())
+    try:
+        metadata = os.fstat(fd)
         if not stat.S_ISREG(metadata.st_mode):
             raise GateError("Snapshot must be a regular file")
         if metadata.st_size > MAX_JSON_BYTES:
             raise GateError("Snapshot exceeds maximum size")
-        return _parse_json(source.read(MAX_JSON_BYTES + 1))
+        return _parse_json(os.read(fd, MAX_JSON_BYTES + 1))
+    finally:
+        os.close(fd)
 
 
 def main(argv=None):
