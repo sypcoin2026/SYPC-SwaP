@@ -61,8 +61,10 @@ class SponsorRefundCompileSpec extends AnyFlatSpec with Matchers {
 
     val buy = hash(bytes("buy", 500L, feeScript))
     val sell = hash(bytes("sell", 500L, feeScript))
-    buy.length shouldBe 64
-    sell.length shouldBe 64
+    // Cross-run fingerprints confirmed identical on Ubuntu 22.04/24.04.
+    // Any deliberate bytecode change requires a reviewed pin update.
+    buy shouldBe "543bbb47d4a979de5aa2c53623f029bc65105ea00f44091a24cc32ca2b5b3c48"
+    sell shouldBe "bedd2e46febfd259572a2d04285eef37254f4abfdc532df5ea74fc12ea5b6faa"
     buy should not be sell
     info(s"FIXTURE_BUY_SHA256=${buy}")
     info(s"FIXTURE_SELL_SHA256=${sell}")
