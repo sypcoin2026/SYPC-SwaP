@@ -32,6 +32,11 @@
 - [x] Audit de workflows y permisos de GitHub agregado a CI, con **145/145 tests PASS** (Python 3.12 y 3.13).
 - [ ] **Bloqueo P0:** habilitar ruleset de `main` con CI obligatorio y revisión humana (issue #6).
 
+- [x] 12 tests reales del intérprete Sigma 4.0.5 en Ubuntu 22.04 y 24.04, compra y venta con UTXOs sintéticos, con huellas SHA-256 idénticas entre ambos entornos.
+- [x] Huellas de los dos ErgoTrees fijadas como aserciones de regresión en el CI de investigación.
+- [ ] Interpretación con el binario y reglas de consenso **SYPC**; todavía no demostrada.
+- [ ] Validez de la transacción completa, comisiones, conservación, doble gasto, cancelación con firma y recuperación ante reorganización de bloques.
+
 ## P2 — Intercambio atómico [pendiente]
 
 - [ ] Seleccionar contrato origen y preparar port aislado con licencia/procedencia.

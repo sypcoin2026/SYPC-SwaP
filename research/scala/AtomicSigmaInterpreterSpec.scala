@@ -140,6 +140,10 @@ class AtomicSigmaInterpreterSpec extends AnyFlatSpec with Matchers {
     println("SYPC_ATOMIC_SELL_SHA256=" + sellHash)
     buyHash.length shouldBe 64
     sellHash.length shouldBe 64
+    // Safety gate: stable build fingerprints from two independent CI runners.
+    // Any change here requires explicit review and a new trusted baseline.
+    buyHash shouldBe "096c67a754bb9ba048cb06d8dc3cbb61ada913dacfe34fbb6d18a83401bde0bb"
+    sellHash shouldBe "9f1a281445976e701d7c23a50f77299856a06b319cffbafdd98eeee86acdceb6"
     (1 to 3).foreach { _ =>
       treeSha256(buyScript) shouldBe buyHash
       treeSha256(sellScript) shouldBe sellHash
