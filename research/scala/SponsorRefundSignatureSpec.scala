@@ -295,12 +295,16 @@ class SponsorRefundSignatureSpec extends AnyFlatSpec with Matchers {
 
     unsignedCtx.boxesToSpend.map(b => BigInt(b.value)).sum shouldBe
       proposal.outputCandidates.map(b => BigInt(b.value)).sum
-    // Digest32 wraps Array[Byte]; Array equality may compare references,
-    // so canonicalize IDs into value-based vectors before asserting equality.
-    unsignedCtx.boxesToSpend.flatMap(b => b.tokens.toArray)
-      .map { case (id, count) => (id.toVector, count) } shouldBe
-      proposal.outputCandidates.flatMap(b => b.tokens.toArray)
-        .map { case (id, count) => (id.toVector, count) }
+    // Explicitly check the transferred token ID BYTES and amount.
+    // Digest32 wraps Array[Byte], whose regular equality is by reference.
+    val spentTokens = unsignedCtx.boxesToSpend(0).tokens
+    val receivedTokens = proposal.outputCandidates(0).tokens
+    spentTokens.size shouldBe 1
+    receivedTokens.size shouldBe 1
+    java.util.Arrays.equals(spentTokens(0)._1, receivedTokens(0)._1) shouldBe true
+    spentTokens(0)._2 shouldBe receivedTokens(0)._2
+    unsignedCtx.boxesToSpend(1).tokens.size shouldBe 0
+    proposal.outputCandidates(1).tokens.size shouldBe 0
 
     implicit val ir: IRContext = new RuntimeIRContext
     val buyerCtx = ErgoLikeContext.copy(unsignedCtx)(selfIndex = 1)
