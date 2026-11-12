@@ -1,12 +1,9 @@
-"""Strict single-input cancellation preview for the SYPC Swap research lab.
+"""Offline preview for the exact TWO-output single-input refund contracts.
 
-NOT a wallet, signature verifier, node client, UTXO proof, or authorization
-to spend funds. This is a deliberately restrictive offline model.
-
-The original Ergo atomic owner-signature branch permits arbitrary outputs.
-Therefore the eventual wallet must independently check the ENTIRE proposed
-transaction before signing a cancellation. This helper illustrates a safe
-minimal transaction shape, rather than changing original contract semantics.
+The synthetic policy mirrors Atomic{Buy,Sell}RefundGuard.sc:
+order input only; OUTPUTS(0) exact owner refund; OUTPUTS(1) miner fee.
+Not an on-chain validity, signature or UTXO proof. Wallets must verify every
+real input/output and chain rule independently before signing.
 """
 
 from __future__ import annotations
@@ -17,12 +14,12 @@ from sypc_swap.atomic_reference import AtomicOrder, MAX_I64, SyntheticOutput
 
 
 class CancelPreflightRejected(ValueError):
-    """Fail closed when the candidate cancellation is not an exact refund."""
+    """Fail closed when the proposed cancellation does not match the contract."""
 
 
 @dataclass(frozen=True)
 class CancellationPlan:
-    """Synthetic plan only; input_ids are NOT on-chain authenticated here."""
+    """Research-only plan; input IDs and outputs are not chain authenticated."""
 
     input_ids: tuple[bytes, ...]
     outputs: tuple[SyntheticOutput, ...]
@@ -41,6 +38,28 @@ def _integer(value: object, label: str, minimum: int = 0) -> None:
         raise CancelPreflightRejected(f"{label}: invalid signed-int64 amount")
 
 
+def _id32(value: object, label: str) -> None:
+    if type(value) is not bytes or len(value) != 32:
+        raise CancelPreflightRejected(f"{label}: invalid 32-byte identifier")
+
+
+def _canonical_locked_tokens(tokens: object) -> tuple[tuple[bytes, int], ...]:
+    """Shared validation for both refund preflights; preserve token order."""
+    if type(tokens) is not tuple:
+        raise CancelPreflightRejected("locked tokens must be an immutable tuple")
+    seen: set[bytes] = set()
+    for item in tokens:
+        if type(item) is not tuple or len(item) != 2:
+            raise CancelPreflightRejected("malformed locked token tuple")
+        token_id, amount = item
+        _id32(token_id, "locked token ID")
+        _integer(amount, "locked token amount", 1)
+        if token_id in seen:
+            raise CancelPreflightRejected("duplicate token ID in refund/locked list")
+        seen.add(token_id)
+    return tokens
+
+
 def preflight_single_input_cancel(
     order: AtomicOrder,
     plan: CancellationPlan,
@@ -50,15 +69,11 @@ def preflight_single_input_cancel(
     miner_fee_proposition: bytes,
     max_miner_fee: int,
 ) -> CancellationReview:
-    """Accept only a transparent refund from exactly one locked order box.
+    """Verify that a synthetic plan matches the strict one-input refund shape.
 
-    All native value and tokens must be accounted for, and every output must
-    be either an exact owner-script output or ONE fee-script output.
-    Unrelated inputs, external recipients, unknown assets, duplicate token
-    identifiers, empty refunds, and fee manipulation are refused.
-
-    Source chain information (including the real UTXO balance and accepted
-    miner fee script) still needs independent validation by a real wallet.
+    Inputs must be verified elsewhere. The original legacy atomic contract
+    still permits an unrestricted owner-signature spend; this helper alone
+    cannot prevent a malicious UI from presenting unsafe bytes for signing.
     """
     if type(order) is not AtomicOrder or type(plan) is not CancellationPlan:
         raise CancelPreflightRejected("invalid order or plan")
@@ -70,71 +85,44 @@ def preflight_single_input_cancel(
             or not 1 <= len(miner_fee_proposition) <= 4096
             or miner_fee_proposition == order.owner_proposition):
         raise CancelPreflightRejected("miner fee script must be trusted and distinct")
-    if (type(plan.input_ids) is not tuple
-            or len(plan.input_ids) != 1
+    if (type(plan.input_ids) is not tuple or len(plan.input_ids) != 1
             or type(plan.input_ids[0]) is not bytes
             or plan.input_ids[0] != order.box_id):
         raise CancelPreflightRejected("cancellation must spend exactly the intended order input")
-    if (type(plan.outputs) is not tuple
-            or not plan.outputs
+    if (type(plan.outputs) is not tuple or len(plan.outputs) != 2
             or any(type(out) is not SyntheticOutput for out in plan.outputs)):
-        raise CancelPreflightRejected("invalid cancellation outputs")
-    if type(locked_tokens) is not tuple:
-        raise CancelPreflightRejected("locked_tokens must be an immutable tuple")
-    expected: dict[bytes, int] = {}
-    for token in locked_tokens:
-        if type(token) is not tuple or len(token) != 2:
-            raise CancelPreflightRejected("malformed locked token tuple")
-        token_id, count = token
-        if type(token_id) is not bytes or len(token_id) != 32:
-            raise CancelPreflightRejected("invalid locked token id")
-        _integer(count, "locked token amount", 1)
-        if token_id in expected:
-            raise CancelPreflightRejected("duplicate locked token id")
-        expected[token_id] = count
+        raise CancelPreflightRejected(
+            "expected exactly one owner refund and exactly one fee output"
+        )
 
-    paid_native = 0
-    fee_native = 0
-    fee_count = 0
-    owner_count = 0
-    returned_tokens: dict[bytes, int] = {}
-    for output in plan.outputs:
-        # Strict template: no embedded registers, zero outputs or token fee.
-        if output.r4_order_id is not None or output.value == 0:
-            raise CancelPreflightRejected("unexpected output registers or zero-valued output")
-        if output.proposition == order.owner_proposition:
-            owner_count += 1
-            paid_native += output.value
-            tokens_in_box: set[bytes] = set()
-            for token_id, amount in output.tokens:
-                if token_id in tokens_in_box:
-                    raise CancelPreflightRejected("duplicate token id in refund output")
-                tokens_in_box.add(token_id)
-                if token_id not in expected:
-                    raise CancelPreflightRejected("unknown token in refund")
-                returned_tokens[token_id] = returned_tokens.get(token_id, 0) + amount
-        elif output.proposition == miner_fee_proposition:
-            fee_count += 1
-            fee_native += output.value
-            if output.tokens:
-                raise CancelPreflightRejected("miner fee output must not receive tokens")
-        else:
-            raise CancelPreflightRejected("third-party output not allowed in cancellation")
+    expected_tokens = _canonical_locked_tokens(locked_tokens)
+    refund, fee = plan.outputs
 
-    if owner_count == 0 or fee_count != 1:
-        raise CancelPreflightRejected("one owner refund and exactly one fee output required")
-    if fee_native > max_miner_fee:
-        raise CancelPreflightRejected("miner fee exceeds local maximum")
-    if returned_tokens != expected:
+    if refund.r4_order_id is not None or fee.r4_order_id is not None:
+        raise CancelPreflightRejected("unexpected output registers")
+    if refund.value == 0 or fee.value == 0:
+        raise CancelPreflightRejected("zero-valued output is forbidden")
+    if refund.proposition != order.owner_proposition:
+        raise CancelPreflightRejected("third-party refund not allowed")
+    if fee.proposition != miner_fee_proposition:
+        raise CancelPreflightRejected("unexpected miner fee script")
+    if fee.tokens:
+        raise CancelPreflightRejected("miner fee output must not receive tokens")
+    if refund.tokens != expected_tokens:
+        # Reject duplicate tokens explicitly, then report substitution or loss.
+        _canonical_locked_tokens(refund.tokens)
+        allowed = {asset_id for asset_id, _ in expected_tokens}
+        if any(asset_id not in allowed for asset_id, _ in refund.tokens):
+            raise CancelPreflightRejected("unknown token in refund")
         raise CancelPreflightRejected("token conservation failed")
-    if paid_native + fee_native != locked_native:
+    if fee.value > max_miner_fee:
+        raise CancelPreflightRejected("miner fee exceeds local maximum")
+    if refund.value + fee.value != locked_native:
         raise CancelPreflightRejected("native value conservation failed")
-    if paid_native < 1:
-        raise CancelPreflightRejected("no native owner refund")
 
     return CancellationReview(
-        owner_native_returned=paid_native,
-        miner_native_fee=fee_native,
-        returned_token_types=len(returned_tokens),
-        owner_output_count=owner_count,
+        owner_native_returned=refund.value,
+        miner_native_fee=fee.value,
+        returned_token_types=len(expected_tokens),
+        owner_output_count=1,
     )

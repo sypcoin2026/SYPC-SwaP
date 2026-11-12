@@ -11,9 +11,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sypc_swap.atomic_reference import AtomicOrder, MAX_I64, SyntheticOutput
+from sypc_swap.atomic_reference import AtomicOrder, SyntheticOutput
 from sypc_swap.cancel_preflight import (
     CancellationPlan, CancellationReview, CancelPreflightRejected,
+    _canonical_locked_tokens, _id32, _integer,
 )
 
 
@@ -25,32 +26,6 @@ class SponsorBox:
     owner_proposition: bytes
     native_value: int
     tokens: tuple[tuple[bytes, int], ...] = ()
-
-
-def _int64(value: object, label: str, minimum: int = 1) -> None:
-    if type(value) is not int or not minimum <= value <= MAX_I64:
-        raise CancelPreflightRejected(f"{label}: invalid native/token amount")
-
-
-def _box_id(value: object, label: str) -> None:
-    if type(value) is not bytes or len(value) != 32:
-        raise CancelPreflightRejected(f"{label}: expected 32-byte box ID")
-
-
-def _locked_tokens(tokens: object) -> tuple[tuple[bytes, int], ...]:
-    if type(tokens) is not tuple:
-        raise CancelPreflightRejected("locked tokens must be a tuple")
-    ids: set[bytes] = set()
-    for token in tokens:
-        if type(token) is not tuple or len(token) != 2:
-            raise CancelPreflightRejected("malformed locked token")
-        token_id, amount = token
-        _box_id(token_id, "locked token")
-        _int64(amount, "locked token amount")
-        if token_id in ids:
-            raise CancelPreflightRejected("duplicated locked token ID")
-        ids.add(token_id)
-    return tokens
 
 
 def preflight_sponsored_cancel(
@@ -67,7 +42,7 @@ def preflight_sponsored_cancel(
     """Check the exact 2-input, 2-output candidate for sponsor refund.
 
     This intentionally mirrors the *strict* structure of our research
-    ErgoScripts, unlike the more permissive single-input preview.
+    ErgoScripts, using the same strict token and amount validators.
 
     Caller-supplied inputs are NOT independently verified; this is defense
     in depth only, not a signature/UTXO/consensus authorization.
@@ -75,13 +50,13 @@ def preflight_sponsored_cancel(
     if (type(order) is not AtomicOrder or type(plan) is not CancellationPlan
             or type(sponsor) is not SponsorBox):
         raise CancelPreflightRejected("invalid review object")
-    _box_id(order.box_id, "order box")
-    _box_id(sponsor.box_id, "sponsor box")
-    _int64(locked_native, "locked native")
-    _int64(sponsor.native_value, "sponsor native")
-    _int64(max_miner_fee, "max miner fee")
-    _int64(min_output_native, "minimum native per output")
-    _locked_tokens(locked_tokens)
+    _id32(order.box_id, "order box")
+    _id32(sponsor.box_id, "sponsor box")
+    _integer(locked_native, "locked native", 1)
+    _integer(sponsor.native_value, "sponsor native", 1)
+    _integer(max_miner_fee, "max miner fee", 1)
+    _integer(min_output_native, "minimum native per output", 1)
+    _canonical_locked_tokens(locked_tokens)
 
     if sponsor.box_id == order.box_id:
         raise CancelPreflightRejected("sponsor cannot duplicate the order input")
@@ -111,8 +86,8 @@ def preflight_sponsored_cancel(
         raise CancelPreflightRejected("incorrect miner fee output")
     if refund.tokens != locked_tokens:
         raise CancelPreflightRejected("exact locked token refund required")
-    _int64(refund.value, "refund native")
-    _int64(fee.value, "fee native")
+    _integer(refund.value, "refund native", 1)
+    _integer(fee.value, "fee native", 1)
     if refund.value < min_output_native or fee.value < min_output_native:
         raise CancelPreflightRejected("output below trusted minimum native value")
     if fee.value > max_miner_fee:

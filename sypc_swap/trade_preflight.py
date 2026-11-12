@@ -29,6 +29,9 @@ def _hash_id(value: object, name: str) -> None:
 
 
 def _asset_id(value: object, name: str) -> None:
+    # Exact type matters: arbitrary __eq__ must not impersonate native SYPC.
+    if type(value) is not str:
+        raise PreflightRejected(f"{name}: expected a plain string asset ID")
     if value != NATIVE_ASSET:
         _hash_id(value, name)
 

@@ -47,7 +47,8 @@ class StrictCancellationTests(unittest.TestCase):
         self.assertEqual(result.miner_native_fee, 25)
         self.assertEqual(result.returned_token_types, 1)
 
-    def test_split_owner_outputs_preserve_assets(self):
+    def test_reject_split_owner_outputs_not_supported_by_contract(self):
+        # Atomic{Buy,Sell}RefundGuard.sc requires exactly TWO outputs.
         plan = CancellationPlan(
             (ID,),
             (
@@ -56,7 +57,24 @@ class StrictCancellationTests(unittest.TestCase):
                 SyntheticOutput(FEE, 25),
             ),
         )
-        self.assertEqual(check(plan).owner_output_count, 2)
+        with self.assertRaisesRegex(CancelPreflightRejected, "exactly"):
+            check(plan)
+
+    def test_reject_reordered_refund_and_fee_outputs(self):
+        # On-chain refund is OUTPUTS(0) and miner fee is OUTPUTS(1).
+        plan = CancellationPlan((ID,), tuple(reversed(good_plan().outputs)))
+        with self.assertRaisesRegex(CancelPreflightRejected, "third-party"):
+            check(plan)
+
+    def test_reject_reordered_tokens_even_when_total_is_preserved(self):
+        # Actual contract uses exact Coll[(id, amount)] equality, not a bag.
+        locked = ((TOKEN, 12), (EXTRA_TOKEN, 8))
+        altered = CancellationPlan((ID,), (
+            SyntheticOutput(OWNER, 975, tuple(reversed(locked))),
+            SyntheticOutput(FEE, 25),
+        ))
+        with self.assertRaisesRegex(CancelPreflightRejected, "token conservation"):
+            check(altered, locked_tokens=locked)
 
     def test_reject_multiple_inputs_even_if_owner_receives_enough(self):
         # The older output-only helper cannot observe extra funding inputs.
@@ -79,7 +97,7 @@ class StrictCancellationTests(unittest.TestCase):
     def test_reject_wrong_recipient_with_correct_total(self):
         forged = CancellationPlan(
             (ID,),
-            (SyntheticOutput(ATTACKER, 400), SyntheticOutput(OWNER, 575, ((TOKEN, 20),)),
+            (SyntheticOutput(ATTACKER, 975, ((TOKEN, 20),)),
              SyntheticOutput(FEE, 25)),
         )
         with self.assertRaisesRegex(CancelPreflightRejected, "third-party"):
