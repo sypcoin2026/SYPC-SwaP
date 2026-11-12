@@ -1,0 +1,83 @@
+name: Upstream contract laboratory (non-production)
+
+on:
+  push:
+    branches:
+      - 'work/atomic-upstream-validation-20261112'
+
+permissions:
+  contents: read
+
+jobs:
+  ergo-atomic-original:
+    name: Ergo atomic original / JDK 11
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout DEX research revision without persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install pinned Java runtime
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '11'
+      - name: Install pinned sbt runner
+        uses: sbt/setup-sbt@6c68d2fe8dfbc0a0534d70101baa2e0420e1a506 # v1.1.9
+        with:
+          sbt-runner-version: '1.11.2'
+      - name: Fetch exact original source (no SYPC chain access)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none https://github.com/ergoplatform/ergo-contracts.git "$RUNNER_TEMP/ergo-contracts"
+          cd "$RUNNER_TEMP/ergo-contracts"
+          git checkout --quiet --detach 17ed58b39460e5520de56f615936d918603a3b9e
+          test "$(git rev-parse HEAD)" = 17ed58b39460e5520de56f615936d918603a3b9e
+          test "$(git hash-object verified-contracts/src/main/scala/org/ergoplatform/contracts/AssetsAtomicExchange.scala)" = 03214d52d9e519843f75abe0cc6e46f33dd99d23
+          test "$(git hash-object LICENSE)" = 0e259d42c996742e9e3cba14c677129b2c1b6311
+          cat project/build.properties
+          echo 'Source and license hashes verified. Original build remains untrusted and isolated.'
+      - name: Execute original atomic exchange tests (outcome must not be inferred)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/ergo-contracts"
+          sbt -batch 'verifiedContractsTests/testOnly *AssetsAtomicExchangeCompilationTest'
+
+  spectrum-amm-original:
+    name: Spectrum AMM original / JDK 11
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout DEX research revision without persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install pinned Java runtime
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '11'
+      - name: Install pinned sbt runner
+        uses: sbt/setup-sbt@6c68d2fe8dfbc0a0534d70101baa2e0420e1a506 # v1.1.9
+        with:
+          sbt-runner-version: '1.11.2'
+      - name: Fetch exact original source and verify hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none https://github.com/spectrum-finance/ergo-dex.git "$RUNNER_TEMP/spectrum-ergo-dex"
+          cd "$RUNNER_TEMP/spectrum-ergo-dex"
+          git checkout --quiet --detach 8fe94e1f8b4e1ab9402fca6fbc3955e3ad1415f7
+          test "$(git rev-parse HEAD)" = 8fe94e1f8b4e1ab9402fca6fbc3955e3ad1415f7
+          test "$(git hash-object contracts/amm/cfmm/v1/n2t/Pool.sc)" = 16d7040a638ed75d448bb25f1ee8a216ec1afd8b
+          test "$(git hash-object LICENSE)" = 1625c1793607996fcfc46420e8aa2f3d2b7efd1e
+          cat project/build.properties
+      - name: Execute original Spectrum CFMM contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/spectrum-ergo-dex"
+          sbt -batch 'testOnly *SwapBuyBoxSpec'
