@@ -69,8 +69,8 @@ jobs:
             AtomicSignedBranchSpec:8 \
             RefundGuardCompileSpec:4 \
             RefundGuardedSignatureSpec:13 \
-            SponsorRefundCompileSpec:4 \
-            SponsorRefundSignatureSpec:25; do
+            SponsorRefundCompileSpec:5 \
+            SponsorRefundSignatureSpec:28; do
             suite="${entry%%:*}"
             minimum="${entry##*:}"
             logfile="$RUNNER_TEMP/${suite}.log"
