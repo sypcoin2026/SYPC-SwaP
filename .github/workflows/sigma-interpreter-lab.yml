@@ -39,7 +39,7 @@ jobs:
           cd "$RUNNER_TEMP/spectrum"
           git checkout --quiet --detach 8fe94e1f8b4e1ab9402fca6fbc3955e3ad1415f7
           test "$(git rev-parse HEAD)" = 8fe94e1f8b4e1ab9402fca6fbc3955e3ad1415f7
-          test "$(git hash-object src/test/scala/io/ergodex/core/SigmaPlatform.scala)" = 0c2a8b0c53d8256d71d960cfd3aee067d5e9a2e4 || true
+          test "$(git hash-object src/test/scala/io/ergodex/core/SigmaPlatform.scala)" = a4b079008592098509cc03bd931a9ef4b5f14518
           test "$(git hash-object contracts/amm/cfmm/v1/n2t/Pool.sc)" = 16d7040a638ed75d448bb25f1ee8a216ec1afd8b
           mkdir -p research/ergo_script
           cp "$GITHUB_WORKSPACE/research/ergo_script/AtomicBuy.sc" research/ergo_script/
