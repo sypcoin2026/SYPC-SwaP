@@ -97,9 +97,9 @@ def capture(role: str, now=None) -> dict:
     # The reported full-block tip must actually have been applied to state.
     if state_version != header:
         raise GateError("State version does not match the applied full-block tip")
-    reported = info.get("isMining", None)
-    if reported is not None and type(reported) is not bool:
-        raise GateError("isMining must be boolean if present")
+    reported = info.get("isMining")
+    if type(reported) is not bool:
+        raise GateError("isMining must be a reported boolean")
     if role == "validator" and reported is True:
         raise GateError("Validator reports mining enabled; review its configuration")
     if now is None:
@@ -139,8 +139,8 @@ def _validated_snapshot(value, now):
     if value["stateVersion"] != value["bestFullHeaderId"]:
         raise GateError("State version differs from the validated full-block tip")
     reported = value["reported_is_mining"]
-    if reported is not None and type(reported) is not bool:
-        raise GateError("Invalid mining status")
+    if type(reported) is not bool:
+        raise GateError("Missing or invalid mining status")
     if value["role"] == "validator" and reported is True:
         raise GateError("Validator reports mining enabled")
     try:
