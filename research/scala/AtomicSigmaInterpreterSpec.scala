@@ -5,13 +5,16 @@ import org.scalatest.matchers.should.Matchers
 import org.ergoplatform._
 import org.ergoplatform.validation.ValidationRules
 import scorex.crypto.hash.Digest32
+import sigmastate._
 import sigmastate.AvlTreeData
 import sigmastate.Values.{ByteArrayConstant, ErgoTree, SigmaPropConstant}
 import sigmastate.basics.DLogProtocol.DLogProverInput
-import sigmastate.eval.{CostingSigmaDslBuilder, IRContext, RuntimeIRContext}
+import sigmastate.eval._
 import sigmastate.eval.Extensions._
 import sigmastate.interpreter.{ContextExtension, CryptoConstants, ProverResult}
 import special.sigma.Header
+import special.collection._
+import scorex.util._
 
 // Lab-only Sigma 4.0.5 interpreter verification with synthetic UTXOs.
 // Not SYPC consensus, a full transaction-validity check, real signatures,
@@ -43,11 +46,11 @@ class AtomicSigmaInterpreterSpec extends AnyFlatSpec with Matchers {
                   asset: Option[Digest32] = None,
                   amount: Long = 0L,
                   ref: Option[Array[Byte]] = None): ErgoBoxCandidate = {
-    val tokens = asset match {
+    val tokens: Coll[(Digest32, Long)] = asset match {
       case Some(id) => Array((id, amount)).toColl
       case None => CostingSigmaDslBuilder.Colls.emptyColl[(Digest32, Long)]
     }
-    val registers = ref match {
+    val registers: Map[ErgoBox.NonMandatoryRegisterId, sigmastate.Values.EvaluatedValue[_ <: sigmastate.SType]] = ref match {
       case Some(id) => Map(ErgoBox.R4 -> ByteArrayConstant(id))
       case None => Map.empty[ErgoBox.NonMandatoryRegisterId, sigmastate.Values.EvaluatedValue[_ <: sigmastate.SType]]
     }
@@ -84,8 +87,8 @@ class AtomicSigmaInterpreterSpec extends AnyFlatSpec with Matchers {
       1.toByte
     )
     implicit val ir: IRContext = new RuntimeIRContext
-    val verifier = new ErgoLikeInterpreter
-    verifier.verify(script, ctx, ProverResult.empty.proof, Array.fill[Byte](32)(1))
+    val verifier = new ErgoLikeInterpreter { override type CTX = ErgoLikeContext }
+    verifier.verify(script, ctx, ProverResult.empty, Array.fill[Byte](32)(1))
       .toOption.exists(_._1)
   }
 
