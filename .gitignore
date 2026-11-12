@@ -1,0 +1,35 @@
+# Keys, wallets, private databases, logs
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.keystore
+*seed*
+*mnemonic*
+*secret*
+wallet/
+wallets/
+db/
+data/private/
+*.sqlite
+*.db
+*.log
+*.bak
+*.tar.gz
+*.zip
+# Build outputs
+target/
+out/
+build/
+dist/
+node_modules/
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+# Editors
+.idea/
+.vscode/
+.DS_Store
