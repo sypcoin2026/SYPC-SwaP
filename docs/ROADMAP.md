@@ -19,6 +19,16 @@
 - [ ] Validar prefijos SYPC, red/génesis, serialización, fees, scripts.
 - [ ] Registrar resultados con hashes, pruebas y evidencias independientes.
 
+## P1.5 — Seguridad del intercambio atómico [investigación avanzada]
+
+- [x] Conservar y estudiar los predicados originales de compraventa/cancelación de Ergo en el laboratorio offline.
+- [x] Reproducir la compilación de contratos candidatos con Sigma 4.0.5 y **aislar el estado del compilador**: 4 tests Scala PASS (no demuestra consenso SYPC).
+- [x] Desarrollar un modelo de preflight de cancelación con una entrada, retorno exacto de activos y comisión acotada; 134 tests Python PASS en CI.
+- [ ] Revalidar hashes de ErgoTree entre procesos, plataformas y versiones antes de publicar cualquier contrato.
+- [ ] Decidir si la cancelación debe imponer devolución on-chain incluso con firma de propietario, en lugar de confiar únicamente en la cartera.
+- [ ] Compilar y ejecutar los contratos portados en nodo SYPC de laboratorio independiente.
+- [ ] Auditoría de claves, cambios de UTXO, tokens, fees y reorgs de la transacción **completa**, no sólo de un predicado.
+
 ## P2 — Intercambio atómico [pendiente]
 
 - [ ] Seleccionar contrato origen y preparar port aislado con licencia/procedencia.
