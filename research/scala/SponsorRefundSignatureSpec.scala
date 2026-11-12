@@ -71,7 +71,9 @@ class SponsorRefundSignatureSpec extends AnyFlatSpec with Matchers {
       case "fill-extra-inventory" => Array((tokenId, 10L), (otherToken, 1L)).toColl
       case _ => tokens(tokenId, 10L)
     } else noTokens
-    val self = new ErgoBoxCandidate(2000000L, tree, 0, locked)
+    val collateral = if (side == "sell" && scenario == "fill-native-overflow")
+      Long.MaxValue - 1L else 2000000L
+    val self = new ErgoBoxCandidate(collateral, tree, 0, locked)
       .toBox(ErgoBox.allZerosModifierId, 0.toShort)
 
     val sponsored = scenario.startsWith("sponsor-")
@@ -118,7 +120,9 @@ class SponsorRefundSignatureSpec extends AnyFlatSpec with Matchers {
       case name if side == "sell" && name.startsWith("fill") =>
         // The old contract accepted 1,000 units even though SELF locked 2M.
         // New sell candidate must give back SELF.value PLUS 1,000 price.
-        val payout = if (name == "fill-underpaid-native") 2000999L else 2001000L
+        val payout = if (name == "fill-underpaid-native") 2000999L
+          else if (name == "fill-native-overflow") Long.MaxValue
+          else 2001000L
         val payoutTokens = if (name == "fill-tokens-in-payout")
           tokens(otherToken, 1L) else noTokens
         IndexedSeq(
@@ -282,6 +286,10 @@ class SponsorRefundSignatureSpec extends AnyFlatSpec with Matchers {
   }
   it should "reject a native payout below box collateral plus sale price" in {
     authorized("sell", "fill-underpaid-native", None) shouldBe false
+  }
+  it should "reject int64-overflow-priced native collateral" in {
+    // BigInt in the script must not wrap SELF.value + MinNativeAmount.
+    authorized("sell", "fill-native-overflow", None) shouldBe false
   }
   it should "reject unrelated tokens in seller native payout" in {
     authorized("sell", "fill-tokens-in-payout", None) shouldBe false
