@@ -1,0 +1,83 @@
+name: Current Sigma contract security gate (research only)
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sypc-sigma-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sigma-research:
+    name: Sigma 4.0.5 current contracts / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    steps:
+      - name: Checkout exact pull request revision without credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Java 11 for pinned Spectrum Sigma 4.0.5
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '11'
+      - name: Pinned sbt launcher
+        uses: sbt/setup-sbt@6c68d2fe8dfbc0a0534d70101baa2e0420e1a506 # v1.1.9
+        with:
+          sbt-runner-version: '1.11.2'
+      - name: Check exact upstream and inspect the complete research source list
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none \
+            https://github.com/spectrum-finance/ergo-dex.git "$RUNNER_TEMP/spectrum"
+          cd "$RUNNER_TEMP/spectrum"
+          git checkout --quiet --detach 8fe94e1f8b4e1ab9402fca6fbc3955e3ad1415f7
+          test "$(git rev-parse HEAD)" = 8fe94e1f8b4e1ab9402fca6fbc3955e3ad1415f7
+          test "$(git hash-object src/test/scala/io/ergodex/core/SigmaPlatform.scala)" = a4b079008592098509cc03bd931a9ef4b5f14518
+          test "$(git hash-object contracts/amm/cfmm/v1/n2t/Pool.sc)" = 16d7040a638ed75d448bb25f1ee8a216ec1afd8b
+          test "$(git hash-object LICENSE)" = 1625c1793607996fcfc46420e8aa2f3d2b7efd1e
+          mkdir -p research/ergo_script
+          for script in AtomicBuy AtomicSell AtomicBuyRefundGuard AtomicSellRefundGuard AtomicBuySponsorRefund AtomicSellSponsorRefund; do
+            test -f "$GITHUB_WORKSPACE/research/ergo_script/${script}.sc"
+            cp "$GITHUB_WORKSPACE/research/ergo_script/${script}.sc" research/ergo_script/
+          done
+          for suite in AtomicScriptCompileSpec AtomicSigmaInterpreterSpec AtomicSignedBranchSpec RefundGuardCompileSpec RefundGuardedSignatureSpec SponsorRefundCompileSpec SponsorRefundSignatureSpec; do
+            test -f "$GITHUB_WORKSPACE/research/scala/${suite}.scala"
+            cp "$GITHUB_WORKSPACE/research/scala/${suite}.scala" src/test/scala/io/ergodex/core/
+          done
+      - name: Run seven suites in separate sbt processes (avoid shared Sigma compiler state)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/spectrum"
+          # SigmaPlatform uses process-local compiler state; a combined ScalaTest
+          # invocation produced intermittent "_sourceContext can be set only once".
+          # Each suite gets a clean sbt/JVM; retain the original 70-test baseline.
+          for entry in \
+            AtomicScriptCompileSpec:4 \
+            AtomicSigmaInterpreterSpec:12 \
+            AtomicSignedBranchSpec:8 \
+            RefundGuardCompileSpec:4 \
+            RefundGuardedSignatureSpec:13 \
+            SponsorRefundCompileSpec:4 \
+            SponsorRefundSignatureSpec:25; do
+            suite="${entry%%:*}"
+            minimum="${entry##*:}"
+            logfile="$RUNNER_TEMP/${suite}.log"
+            sbt -batch "testOnly io.ergodex.core.${suite}" 2>&1 | tee "$logfile"
+            grep -q 'All tests passed\.' "$logfile"
+            count="$(sed -nE 's/.*Total number of tests run: ([0-9]+).*/\1/p' "$logfile" | tail -n 1)"
+            test -n "$count" && test "$count" -ge "$minimum"
+            echo "SIGMA_SUITE_PASS ${suite}: ${count} tests (minimum ${minimum})"
+          done
+          echo 'SIGMA_LAB_SEVEN_ISOLATED_SUITES_PASS; NOT_SYPC_CONSENSUS'

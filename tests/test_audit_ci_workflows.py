@@ -55,6 +55,27 @@ class WorkflowSafetyTests(unittest.TestCase):
             with self.subTest(trigger=trigger):
                 self.assertTrue(any("elevated" in x for x in audit_text(candidate, "bad.yml")))
 
+    def test_inline_elevated_triggers_rejected(self):
+        for trigger in ("on: [push, pull_request_target]", "on: workflow_run",
+                        "on: [workflow_run, push]"):
+            candidate = valid_workflow().replace("on:\n  push:", trigger)
+            with self.subTest(trigger=trigger):
+                self.assertTrue(any(
+                    "elevated" in x for x in audit_text(candidate, "bad.yml")
+                ))
+
+    def test_job_level_permissions_overrides_are_rejected(self):
+        for override in ("write-all", "read-all"):
+            candidate = valid_workflow().replace(
+                "    runs-on: ubuntu-24.04",
+                "    permissions: " + override + "\n    runs-on: ubuntu-24.04",
+            )
+            with self.subTest(value=override):
+                self.assertTrue(any(
+                    "job-level permissions" in x
+                    for x in audit_text(candidate, "bad.yml")
+                ))
+
     def test_checkout_persisted_credentials_rejected(self):
         candidate = valid_workflow().replace("persist-credentials: false", "persist-credentials: true")
         self.assertTrue(any("persist" in x for x in audit_text(candidate, "bad.yml")))

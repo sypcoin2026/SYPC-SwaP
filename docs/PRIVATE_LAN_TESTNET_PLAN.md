@@ -41,16 +41,16 @@ Herramienta: `tools/lan_consensus_gate.py`. Python estándar, sin dependencias e
 - En **portátil**, desde su propia copia:  
   `python3 tools/lan_consensus_gate.py capture --role validator --out "$HOME/syp-validator-snapshot.json"`
 - Copiar el snapshot del portátil al sobremesa mediante un canal LAN autenticado elegido por el operador; no subirlo a GitHub.  
-- En sobremesa, dentro de los 5 minutos siguientes:  
-  `python3 tools/lan_consensus_gate.py compare --producer "$HOME/syp-producer-snapshot.json" --validator "$HOME/syp-validator-snapshot.json"`
+- En sobremesa, dentro de los 5 minutos siguientes, tras fijar `GENESIS_ID` desde el manifiesto de génesis **verificado independientemente** y no desde las respuestas `/info`:  
+  `python3 tools/lan_consensus_gate.py compare --producer "$HOME/syp-producer-snapshot.json" --validator "$HOME/syp-validator-snapshot.json" --expected-genesis-id "$GENESIS_ID"`
 
 El guard crea snapshots nuevos con modo `0600`, nunca sobrescribe un archivo existente y entrega SHA-256. Si el nodo está parado o su API no responde, el guard falla sin iniciar nada. Si la API actual usa otros nombres de campo, el guard **falla** en lugar de adivinar o degradar su seguridad; adaptar la herramienta contra una respuesta redactada y verificada.
 
-`PASS_READONLY_TIP_CONSISTENCY_ONLY` solo prueba que ambas respuestas locales coinciden en **ID de génesis reportada, punta completa, versión del estado aplicado y raíz de estado al instante capturado**. NO prueba que las dos redes tengan la misma génesis auténtica, que los nodos se validen de forma criptográficamente independiente, que no haya exposición al exterior, ni que un solo contrato del DEX funcione.
+`PASS_READONLY_TIP_CONSISTENCY_ONLY` solo prueba que ambas respuestas locales coinciden con la **génesis fijada por el operador** y entre sí en punta completa, versión del estado aplicado y raíz al instante capturado. Este chequeo no autentica el origen del manifiesto introducido. NO prueba que las dos redes tengan la misma génesis auténtica, que los nodos se validen de forma criptográficamente independiente, que no haya exposición al exterior, ni que un solo contrato del DEX funcione.
 
 ### Compatibilidad y seguridad de la captura
 
-El comprobador rechaza que `stateVersion` (bloque cuyo estado está aplicado) sea distinto de `bestFullHeaderId`, aunque las alturas y raíces informadas por dos procesos coincidan. Esta propiedad sigue sin autenticar la génesis ni los binarios de los nodos. Para evitar lecturas arbitrarias o excesivas, sólo acepta snapshots de archivos regulares, con lectura acotada y sin seguir enlaces simbólicos en Linux. El formato de snapshot ahora es `SYPC_PRIVATE_LAN_READONLY_V2`; no se deben reutilizar capturas V1 como si fueran equivalentes.
+El comprobador rechaza que `stateVersion` (bloque cuyo estado está aplicado) sea distinto de `bestFullHeaderId`, aunque las alturas y raíces informadas por dos procesos coincidan. Esta propiedad sigue sin autenticar la génesis ni los binarios de los nodos. Para evitar lecturas arbitrarias o excesivas, sólo acepta snapshots de archivos regulares, con lectura acotada y sin seguir enlaces simbólicos en Linux. El formato de snapshot ahora es `SYPC_PRIVATE_LAN_READONLY_V2`; no se deben reutilizar capturas V1 como si fueran equivalentes. Las lecturas de snapshots usan modo no bloqueante para rechazar FIFOs y archivos especiales, sin esperar a un escritor.
 
 ## 4. Requisitos de la siguiente prueba de DEX en cadena descartable
 

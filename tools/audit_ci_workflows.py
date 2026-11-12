@@ -16,6 +16,11 @@ ACTION_RE = re.compile(r"^\s*(?:-\s*)?uses:\s*([^\s#]+)")
 SHA_RE = re.compile(r"\A[0-9a-f]{40}\Z")
 ON_DANGEROUS_RE = re.compile(r"^\s{2}(?:pull_request_target|workflow_run):\s*(?:#.*)?$")
 WRITE_RE = re.compile(r"^\s+[a-zA-Z-]+:\s*write\s*(?:#.*)?$")
+ON_INLINE_ELEVATED_RE = re.compile(
+    r"(?m)^on:\s*(?:\[[^\]]*\b(?:pull_request_target|workflow_run)\b|"
+    r"(?:pull_request_target|workflow_run)\b)"
+)
+JOB_PERMISSIONS_RE = re.compile(r"^\s+permissions\s*:")
 CHECKOUT_RE = re.compile(r"^actions/checkout@", re.IGNORECASE)
 
 
@@ -31,8 +36,12 @@ def audit_text(text: str, name: str) -> list[str]:
         problems.append(f"{name}: missing contents: read restriction")
     if any(WRITE_RE.match(line) for line in lines):
         problems.append(f"{name}: write permission is forbidden for research CI")
-    if any(ON_DANGEROUS_RE.match(line) for line in lines):
+    if any(ON_DANGEROUS_RE.match(line) for line in lines) or ON_INLINE_ELEVATED_RE.search(text):
         problems.append(f"{name}: dangerous elevated event trigger")
+    # No job may override the top-level read-only permission set.
+    # In particular, "permissions: write-all" can bypass WRITE_RE.
+    if any(JOB_PERMISSIONS_RE.match(line) for line in lines):
+        problems.append(f"{name}: job-level permissions override forbidden")
     refs: list[str] = []
     for n, line in enumerate(lines, start=1):
         match = ACTION_RE.match(line)

@@ -5,7 +5,9 @@ import json
 import unittest
 from pathlib import Path
 
-from tools.verify_sources import ValidationError, validate_manifest
+from tools.verify_sources import (
+    ValidationError, validate_manifest, validate_snapshot_pins,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -16,6 +18,37 @@ class UpstreamManifestTests(unittest.TestCase):
 
     def test_real_manifest_is_well_formed(self):
         self.assertEqual(len(validate_manifest(self.valid)), 3)
+
+    def test_snapshot_records_match_upstream_commit_and_license(self):
+        pinned = validate_manifest(self.valid)
+        refs = json.loads((ROOT / "third_party" / "REFERENCES.json").read_text(encoding="utf-8"))
+        self.assertEqual(validate_snapshot_pins(pinned, refs), 8)
+
+        stale = copy.deepcopy(refs)
+        stale["files"][0]["revision"] = "d" * 40
+        with self.assertRaisesRegex(ValidationError, "revision"):
+            validate_snapshot_pins(pinned, stale)
+
+        wrong_license = copy.deepcopy(refs)
+        wrong_license["files"][1]["license_declared"] = "MIT"
+        with self.assertRaisesRegex(ValidationError, "license"):
+            validate_snapshot_pins(pinned, wrong_license)
+
+        unrelated = copy.deepcopy(refs)
+        unrelated["files"][0]["upstream"] = "other/repo"
+        with self.assertRaisesRegex(ValidationError, "unknown upstream"):
+            validate_snapshot_pins(pinned, unrelated)
+
+        runnable = copy.deepcopy(refs)
+        runnable["files"][0]["executable"] = True
+        with self.assertRaisesRegex(ValidationError, "executable"):
+            validate_snapshot_pins(pinned, runnable)
+
+    def test_duplicate_upstream_url_must_not_override_pin(self):
+        bad = copy.deepcopy(self.valid)
+        bad["sources"][1]["url"] = bad["sources"][0]["url"]
+        with self.assertRaisesRegex(ValidationError, "duplicate upstream URL"):
+            validate_manifest(bad)
 
     def test_reject_weak_commit_pin(self):
         invalid = copy.deepcopy(self.valid)

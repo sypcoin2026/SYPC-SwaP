@@ -60,7 +60,7 @@ Las constantes `FeePropBytes` y `MaxCancelFee` quedan fijadas en el ErgoTree; la
 
 - `research/scala/RefundGuardCompileSpec.scala`: compilación y enlace de parámetros (laboratorio).
 - `research/scala/RefundGuardedSignatureSpec.scala`: firma Sigma real con claves **sintéticas desechables**; escenarios legítimos y maliciosos.
-- CI `.github/workflows/refund-guard-compile.yml`: dos runners Linux con toolchain, versiones y commits fijados.
+- CI workflow de laboratorio histórico (conservado en el historial Git); en la rama auditada actual los mismos casos están incluidos en `.github/workflows/security-sigma-current.yml`: dos runners Linux con toolchain, versiones y commits fijados.
 - **No** se ejecuta ningún nodo SYPC, no se opera con claves reales y no se generan operaciones en la blockchain.
 - Los resultados y los fallos deben conservarse en esta ADR cuando se verifiquen en GitHub Actions.
 

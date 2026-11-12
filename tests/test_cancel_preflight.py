@@ -3,7 +3,7 @@
 from dataclasses import replace
 import unittest
 
-from sypc_swap.atomic_reference import AtomicOrder, Side, SyntheticOutput, wallet_cancel_refund_preflight
+from sypc_swap.atomic_reference import AtomicOrder, Side, SyntheticOutput
 from sypc_swap.cancel_preflight import (
     CancellationPlan, CancelPreflightRejected, preflight_single_input_cancel,
 )
@@ -77,12 +77,8 @@ class StrictCancellationTests(unittest.TestCase):
             check(altered, locked_tokens=locked)
 
     def test_reject_multiple_inputs_even_if_owner_receives_enough(self):
-        # The older output-only helper cannot observe extra funding inputs.
+        # Refuse a superficially correct output set with an unrelated input.
         deceptive = CancellationPlan((ID, OTHER_ID), good_plan().outputs)
-        self.assertTrue(wallet_cancel_refund_preflight(
-            order(), deceptive.outputs,
-            locked_native=1000, locked_tokens=((TOKEN, 20),), max_native_fee=30
-        ))
         with self.assertRaisesRegex(CancelPreflightRejected, "exactly"):
             check(deceptive)
 

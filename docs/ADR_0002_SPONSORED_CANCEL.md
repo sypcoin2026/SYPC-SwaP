@@ -47,7 +47,7 @@ Un operador externo o indexador no debe poder elegir arbitrariamente el script d
 
 - `research/scala/SponsorRefundCompileSpec.scala`: compilación, reproducibilidad y constantes fijadas.
 - `research/scala/SponsorRefundSignatureSpec.scala`: firmas Sigma de prueba, aceptación de cancelación y rechazos por scripts ajenos, tokens adicionales, importe insuficiente, exceso de fee, tercera entrada y SELF duplicado.
-- `.github/workflows/sponsor-refund-lab.yml`: pruebas en dos Ubuntu aislados, Java 11, Spectrum/Sigma 4.0.5 fijado a commit.
+- workflow de laboratorio histórico (conservado en el historial Git); el gate vigente para cambios futuros es `.github/workflows/security-sigma-current.yml`: pruebas en dos Ubuntu aislados, Java 11, Spectrum/Sigma 4.0.5 fijado a commit.
 - En todas las pruebas: únicamente datos sintéticos; sin transacciones reales ni fondos.
 
 **Decisión vigente:** mantenerlo como experimento, exigir validación nativa SYPC y auditoría externa, y NO adoptar como contrato de producción hasta demostrar también las reglas de recuperación.

@@ -45,6 +45,8 @@ El proyecto incluye un **modelo matemático de AMM**, no un exchange ejecutable 
 
 Se han desarrollado [validaciones offline **fail-closed**](docs/SECURITY_GATES_PHASE2.md) que rechazan cambios de red, pool, activos, destinatario, UTXO, vencimiento y comisiones. Un [workflow de seguridad](.github/workflows/security-offline.yml) comprueba los snapshots originales y ejecuta pruebas negativas en Python 3.12/3.13.
 
+Los cambios actuales en contratos experimentales pasan también por [la puerta Sigma vigente](.github/workflows/security-sigma-current.yml) (siete suites, JDK 11, dos entornos Linux). Las comprobaciones de procedencia vinculan los dos manifiestos de terceros a los mismos commits y licencias. **Ningún PASS offline certifica ejecución en un nodo SYPC ni autorización para operar fondos reales.**
+
 **Importante:** no es un exchange funcional. Ninguna firma ni contrato de SYPC se ha ejecutado; los gates son defensa en profundidad e **insuficientes para fondos reales**. La integración se revisa en el [PR de seguridad](https://github.com/sypcoin2026/SYPC-SwaP/pull/5).
 
 ## Hoja de ruta
