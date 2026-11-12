@@ -41,6 +41,12 @@ python3 -m unittest discover -s tests -v
 
 El proyecto incluye un **modelo matemático de AMM**, no un exchange ejecutable ni una cotización de mercado. La [evidencia de fase 1](docs/EVIDENCE_PHASE1_20261112.md) distingue los niveles de prueba.
 
+## Seguridad preventiva — fase 2
+
+Se han desarrollado [validaciones offline **fail-closed**](docs/SECURITY_GATES_PHASE2.md) que rechazan cambios de red, pool, activos, destinatario, UTXO, vencimiento y comisiones. Un [workflow de seguridad](.github/workflows/security-offline.yml) comprueba los snapshots originales y ejecuta pruebas negativas en Python 3.12/3.13.
+
+**Importante:** no es un exchange funcional. Ninguna firma ni contrato de SYPC se ha ejecutado; los gates son defensa en profundidad e **insuficientes para fondos reales**. La integración se revisa en el [PR de seguridad](https://github.com/sypcoin2026/SYPC-SwaP/pull/5).
+
 ## Hoja de ruta
 
 - **Fase 0 — documentación y pruebas de compatibilidad:** modelo de amenazas, invariantes, catálogo de dependencias y prueba de ErgoScript/tokens de la red privada.
