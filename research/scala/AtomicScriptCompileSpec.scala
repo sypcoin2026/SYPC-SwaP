@@ -12,8 +12,12 @@ class AtomicScriptCompileSpec extends AnyFlatSpec with Matchers with SigmaPlatfo
   private val buyerPk = DLogProverInput(BigInt(123456789).bigInteger).publicImage
   private val sellerPk = DLogProverInput(BigInt(987654321).bigInteger).publicImage
 
+  // Use a fresh SigmaPlatform and its compile-time IR context for each
+  // compile; the reference platform holds a mutable compiler instance.
+  // Do not weaken the byte-for-byte reproducibility assertions below.
   private def serialize(source: String, env: Map[String, Any]): Array[Byte] = {
-    val tree = compile(readSource(source), env)
+    val isolated = new SigmaPlatform {}
+    val tree = isolated.compile(isolated.readSource(source), env)
     ErgoTreeSerializer.DefaultSerializer.serializeErgoTree(tree)
   }
 
@@ -26,7 +30,7 @@ class AtomicScriptCompileSpec extends AnyFlatSpec with Matchers with SigmaPlatfo
     val source = "research/ergo_script/AtomicBuy.sc"
     val first = serialize(source, env)
     first.length should be > 0
-    first.toSeq shouldBe serialize(source, env).toSeq
+    (1 to 5).foreach { _ => first.toSeq shouldBe serialize(source, env).toSeq }
   }
 
   it should "bind the requested token and minimum amount in its compiled tree" in {
