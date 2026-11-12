@@ -151,6 +151,66 @@ class SponsorRefundSignatureSpec extends AnyFlatSpec with Matchers {
     proof.exists(p => verifier.verify(tree, ctx, p, msg).toOption.exists(_._1))
   }
 
+  private def validateSignedTwoInputTransaction(side: String): Unit = {
+    val (tree, unsignedCtx) = context(side, "sponsor-safe")
+    unsignedCtx.boxesToSpend.size shouldBe 2
+    val originalTx = unsignedCtx.spendingTransaction
+    val message = originalTx.messageToSign
+    val sponsorCtx = ErgoLikeContext.copy(unsignedCtx)(selfIndex = 1)
+    implicit val ir: IRContext = new RuntimeIRContext
+    val prover = new ErgoLikeInterpreter with ProverInterpreter {
+      override type CTX = ErgoLikeContext
+      override val secrets = Seq(ownerSk)
+    }
+    val verifier = new ErgoLikeInterpreter { override type CTX = ErgoLikeContext }
+    val orderProof = prover.prove(tree, unsignedCtx, message).get
+    val sponsorProof = prover.prove(sponsorCtx.self.ergoTree, sponsorCtx, message).get
+    val signed = ErgoLikeTransaction(
+      IndexedSeq(
+        Input(unsignedCtx.boxesToSpend(0).id, orderProof),
+        Input(unsignedCtx.boxesToSpend(1).id, sponsorProof)
+      ), originalTx.outputCandidates
+    )
+    java.util.Arrays.equals(signed.messageToSign, message) shouldBe true
+    val ctxOrderSigned = unsignedCtx.withTransaction(signed)
+    val ctxSponsorSigned = sponsorCtx.withTransaction(signed)
+    verifier.verify(tree, ctxOrderSigned, orderProof, message).get._1 shouldBe true
+    verifier.verify(sponsorCtx.self.ergoTree, ctxSponsorSigned, sponsorProof, message).get._1 shouldBe true
+
+    // Extra invariant checks are a test-fixture assertion. They are NOT
+    // chain-level validation or a substitute for a fully validating node.
+    unsignedCtx.boxesToSpend.map(_.value).sum shouldBe
+      originalTx.outputCandidates.map(_.value).sum
+    originalTx.inputs.map(_.boxId).distinct.size shouldBe 2
+
+    // The sponsor input carries its own owner script, and an attacker with
+    // a different key cannot create its spending proof.
+    val badProver = new ErgoLikeInterpreter with ProverInterpreter {
+      override type CTX = ErgoLikeContext
+      override val secrets = Seq(thirdSk)
+    }
+    badProver.prove(sponsorCtx.self.ergoTree, sponsorCtx, message).isFailure shouldBe true
+
+    // An existing proof is cryptographically bound to these tx bytes.
+    val altered = ErgoLikeTransaction(
+      signed.inputs,
+      IndexedSeq(
+        new ErgoBoxCandidate(123L, ownerTree, 0),
+        originalTx.outputCandidates(1)
+      )
+    )
+    java.util.Arrays.equals(altered.messageToSign, message) shouldBe false
+    verifier.verify(sponsorCtx.self.ergoTree, ctxSponsorSigned, sponsorProof,
+      altered.messageToSign).toOption.exists(_._1) shouldBe false
+  }
+
+  "Two-input signature binding" should "verify BOTH order and sponsor proofs for buy" in {
+    validateSignedTwoInputTransaction("buy")
+  }
+  it should "verify BOTH order and sponsor proofs for sell" in {
+    validateSignedTwoInputTransaction("sell")
+  }
+
   "Guarded buy cancellation" should "permit exact owner refund with a real signature" in {
     authorized("buy", "safe", Some(ownerSk)) shouldBe true
   }
