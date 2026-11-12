@@ -55,7 +55,7 @@ def _canonical_locked_tokens(tokens: object) -> tuple[tuple[bytes, int], ...]:
         _id32(token_id, "locked token ID")
         _integer(amount, "locked token amount", 1)
         if token_id in seen:
-            raise CancelPreflightRejected("duplicate locked token ID")
+            raise CancelPreflightRejected("duplicate token ID in refund/locked list")
         seen.add(token_id)
     return tokens
 
