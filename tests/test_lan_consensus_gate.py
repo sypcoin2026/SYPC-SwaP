@@ -136,6 +136,22 @@ class LanReadonlyGateTests(unittest.TestCase):
             with self.assertRaises(gate.GateError):
                 gate.capture("validator", now=NOW)
 
+    def test_mining_status_must_be_explicit_and_boolean(self):
+        for unknown in (None, "false", 0, 1):
+            with self.subTest(value=unknown):
+                with self.assertRaisesRegex(gate.GateError, "mining status"):
+                    gate.compare(snapshot(), snapshot(
+                        "validator", reported_is_mining=unknown,
+                    ), now=NOW)
+                info = {
+                    "fullHeight": 377, "genesisBlockId": GENESIS,
+                    "bestFullHeaderId": HEADER, "stateVersion": HEADER,
+                    "stateRoot": ROOT, "isMining": unknown,
+                }
+                with patch.object(gate, "_get_local_json", side_effect=[info, []]):
+                    with self.assertRaisesRegex(gate.GateError, "isMining"):
+                        gate.capture("validator", now=NOW)
+
     def test_capture_rejects_unapplied_full_tip(self):
         with patch.object(gate, "_get_local_json", side_effect=[
             {"fullHeight": 377, "genesisBlockId": GENESIS,
