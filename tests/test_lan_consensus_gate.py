@@ -33,49 +33,74 @@ def snapshot(role="producer", **changes):
     return value
 
 
+def pinned_compare(producer, validator, *, now=None):
+    return gate.compare(
+        producer, validator, expected_genesis_id=GENESIS, now=now,
+    )
+
+
 class LanReadonlyGateTests(unittest.TestCase):
+    def test_reject_unpinned_or_different_expected_genesis(self):
+        with self.assertRaises(TypeError):
+            gate.compare(snapshot(), snapshot("validator"), now=NOW)
+        for invalid in ("d" * 64, "INVALID", None, True):
+            with self.subTest(invalid=invalid), self.assertRaises(gate.GateError):
+                gate.compare(snapshot(), snapshot("validator"),
+                             expected_genesis_id=invalid, now=NOW)
+
+    @unittest.skipUnless(hasattr(os, "mkfifo") and hasattr(os, "O_NONBLOCK"),
+                         "requires FIFO and O_NONBLOCK")
+    def test_fifo_snapshot_is_rejected_without_waiting_for_a_writer(self):
+        with tempfile.TemporaryDirectory() as folder:
+            fifo = Path(folder) / "untrusted-fifo"
+            os.mkfifo(fifo)
+            # This would block indefinitely in O_RDONLY without O_NONBLOCK.
+            with self.assertRaisesRegex(gate.GateError, "regular file"):
+                gate._read_snapshot(fifo)
+
+
     def test_equal_full_tip_and_state_is_readonly_pass(self):
-        result = gate.compare(snapshot(), snapshot("validator"), now=NOW)
+        result = pinned_compare(snapshot(), snapshot("validator"), now=NOW)
         self.assertEqual(result["status"], "PASS_READONLY_TIP_CONSISTENCY_ONLY")
         self.assertEqual(result["fullHeight"], 377)
         self.assertTrue(result["requires_separate_genesis_firewall_and_tx_validation"])
 
     def test_mismatched_genesis_is_rejected(self):
         with self.assertRaisesRegex(gate.GateError, "genesisBlockId"):
-            gate.compare(snapshot(), snapshot("validator", genesisBlockId="d" * 64), now=NOW)
+            pinned_compare(snapshot(), snapshot("validator", genesisBlockId="d" * 64), now=NOW)
 
     def test_mismatched_full_height_is_rejected(self):
         with self.assertRaisesRegex(gate.GateError, "fullHeight"):
-            gate.compare(snapshot(), snapshot("validator", fullHeight=376), now=NOW)
+            pinned_compare(snapshot(), snapshot("validator", fullHeight=376), now=NOW)
 
     def test_mismatched_header_is_rejected(self):
         # Both nodes may be internally consistent but disagree with each other.
         with self.assertRaisesRegex(gate.GateError, "bestFullHeaderId"):
-            gate.compare(snapshot(), snapshot(
+            pinned_compare(snapshot(), snapshot(
                 "validator", bestFullHeaderId="c" * 64, stateVersion="c" * 64,
             ), now=NOW)
 
     def test_state_version_lag_blocks_a_false_pass(self):
         # Two nodes with the same apparent full tip but stale state are unsafe.
         with self.assertRaisesRegex(gate.GateError, "State version"):
-            gate.compare(snapshot(stateVersion="d" * 64),
+            pinned_compare(snapshot(stateVersion="d" * 64),
                          snapshot("validator", stateVersion="d" * 64), now=NOW)
 
     def test_mismatched_state_root_is_rejected(self):
         with self.assertRaisesRegex(gate.GateError, "stateRoot"):
-            gate.compare(snapshot(), snapshot("validator", stateRoot="c" * 64), now=NOW)
+            pinned_compare(snapshot(), snapshot("validator", stateRoot="c" * 64), now=NOW)
 
     def test_zero_connected_peers_is_rejected(self):
         with self.assertRaisesRegex(gate.GateError, "connected peers"):
-            gate.compare(snapshot(connected_peers=0), snapshot("validator"), now=NOW)
+            pinned_compare(snapshot(connected_peers=0), snapshot("validator"), now=NOW)
 
     def test_no_validated_block_is_rejected(self):
         with self.assertRaisesRegex(gate.GateError, "No full blocks"):
-            gate.compare(snapshot(fullHeight=0), snapshot("validator", fullHeight=0), now=NOW)
+            pinned_compare(snapshot(fullHeight=0), snapshot("validator", fullHeight=0), now=NOW)
 
     def test_validator_mining_enabled_is_rejected(self):
         with self.assertRaisesRegex(gate.GateError, "mining"):
-            gate.compare(snapshot(), snapshot("validator", reported_is_mining=True), now=NOW)
+            pinned_compare(snapshot(), snapshot("validator", reported_is_mining=True), now=NOW)
 
     def test_stale_future_and_out_of_sync_snapshots_are_rejected(self):
         stale = (NOW - timedelta(minutes=16)).isoformat()
@@ -83,9 +108,9 @@ class LanReadonlyGateTests(unittest.TestCase):
         far = (NOW - timedelta(minutes=7)).isoformat()
         for timestamp in (stale, future):
             with self.subTest(timestamp=timestamp), self.assertRaises(gate.GateError):
-                gate.compare(snapshot(), snapshot("validator", captured_at_utc=timestamp), now=NOW)
+                pinned_compare(snapshot(), snapshot("validator", captured_at_utc=timestamp), now=NOW)
         with self.assertRaisesRegex(gate.GateError, "close enough"):
-            gate.compare(snapshot(), snapshot("validator", captured_at_utc=far), now=NOW)
+            pinned_compare(snapshot(), snapshot("validator", captured_at_utc=far), now=NOW)
 
     def test_role_schema_and_invalid_identifiers_rejected(self):
         cases = [
@@ -102,11 +127,11 @@ class LanReadonlyGateTests(unittest.TestCase):
         for producer, validator in cases:
             with self.subTest(producer=producer, validator=validator):
                 with self.assertRaises(gate.GateError):
-                    gate.compare(producer, validator, now=NOW)
+                    pinned_compare(producer, validator, now=NOW)
 
     def test_timestamp_with_no_timezone_rejected(self):
         with self.assertRaisesRegex(gate.GateError, "timestamp"):
-            gate.compare(snapshot(), snapshot("validator", captured_at_utc="2026-11-12T20:00:00"), now=NOW)
+            pinned_compare(snapshot(), snapshot("validator", captured_at_utc="2026-11-12T20:00:00"), now=NOW)
 
     def test_capture_reads_only_local_info_and_peers(self):
         info = {
@@ -140,7 +165,7 @@ class LanReadonlyGateTests(unittest.TestCase):
         for unknown in (None, "false", 0, 1):
             with self.subTest(value=unknown):
                 with self.assertRaisesRegex(gate.GateError, "mining status"):
-                    gate.compare(snapshot(), snapshot(
+                    pinned_compare(snapshot(), snapshot(
                         "validator", reported_is_mining=unknown,
                     ), now=NOW)
                 info = {
