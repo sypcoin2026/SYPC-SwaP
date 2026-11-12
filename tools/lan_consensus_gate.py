@@ -154,8 +154,13 @@ def _validated_snapshot(value, now):
     return timestamp
 
 
-def compare(producer: dict, validator: dict, now=None) -> dict:
-    """Check two FRESH node observations; does not validate a swap or its blocks."""
+def compare(producer: dict, validator: dict, *, expected_genesis_id: str, now=None) -> dict:
+    """Check two FRESH node observations against an independently pinned genesis.
+
+    The expected ID must come from an owner's reviewed SYPC genesis manifest,
+    NOT either peer's response; this remains a metadata check, not proof of PoW.
+    """
+    _hash64(expected_genesis_id, "expected_genesis_id")
     if now is None:
         now = datetime.now(timezone.utc)
     if now.tzinfo is None:
@@ -164,6 +169,8 @@ def compare(producer: dict, validator: dict, now=None) -> dict:
     b_time = _validated_snapshot(validator, now)
     if producer["role"] != "producer" or validator["role"] != "validator":
         raise GateError("Wrong node roles")
+    if producer["genesisBlockId"] != expected_genesis_id or validator["genesisBlockId"] != expected_genesis_id:
+        raise GateError("Reported genesis does not match independently pinned genesis")
     if abs((a_time - b_time).total_seconds()) > MAX_CAPTURE_SKEW_SECONDS:
         raise GateError("Snapshots not collected close enough in time")
     if producer["connected_peers"] < 1 or validator["connected_peers"] < 1:
@@ -201,6 +208,11 @@ def _read_snapshot(path):
     # Open once and bound bytes even if a file changes between stat and read.
     # On Linux, O_NOFOLLOW refuses symlinks; never read a device or FIFO.
     flags = os.O_RDONLY
+    # Without O_NONBLOCK, opening a named pipe can hang BEFORE fstat runs.
+    if hasattr(os, "O_NONBLOCK"):
+        flags |= os.O_NONBLOCK
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     fd = os.open(Path(path), flags)
@@ -224,6 +236,8 @@ def main(argv=None):
     cmp = sub.add_parser("compare", help="Compare two locally captured JSON files")
     cmp.add_argument("--producer", required=True)
     cmp.add_argument("--validator", required=True)
+    cmp.add_argument("--expected-genesis-id", required=True,
+                     help="64-char hex genesis ID pinned from owner-reviewed manifest")
     args = parser.parse_args(argv)
     try:
         if args.command == "capture":
@@ -231,7 +245,10 @@ def main(argv=None):
             digest = _write_private_new_file(args.out, result)
             print("CAPTURED_READONLY; SHA256=" + digest)
         else:
-            result = compare(_read_snapshot(args.producer), _read_snapshot(args.validator))
+            result = compare(
+                _read_snapshot(args.producer), _read_snapshot(args.validator),
+                expected_genesis_id=args.expected_genesis_id,
+            )
             print(json.dumps(result, sort_keys=True))
     except (GateError, OSError, RuntimeError, ValueError) as exc:
         print("BLOCKED: " + str(exc), file=sys.stderr)
