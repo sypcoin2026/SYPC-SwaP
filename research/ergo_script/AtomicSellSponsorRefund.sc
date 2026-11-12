@@ -4,11 +4,22 @@
 // Adapted from Ergo Contracts AssetsAtomicExchange (CC0-1.0)
 // 17ed58b39460e5520de56f615936d918603a3b9e.
 {
+  // A signed-free fill must never sell a different token, extra assets, or
+  // more tokens than the order specifies. Recover the box's own native value
+  // ON TOP of the seller's required sale price; no implicit native subsidy.
+  // All parameters are baked into the ErgoTree at order creation.
   val validFill =
+    MinNativeAmount > 0L &&
+    SellTokenAmount > 0L &&
+    SELF.tokens.size == 1 &&
+    SELF.tokens(0)._1 == SellTokenId &&
+    SELF.tokens(0)._2 == SellTokenAmount &&
     OUTPUTS.size > 1 &&
     OUTPUTS(1).R4[Coll[Byte]].isDefined &&
     OUTPUTS(1).R4[Coll[Byte]].get == SELF.id &&
-    OUTPUTS(1).value >= MinNativeAmount &&
+    OUTPUTS(1).value.toBigInt >=
+      SELF.value.toBigInt + MinNativeAmount.toBigInt &&
+    OUTPUTS(1).tokens.size == 0 &&
     OUTPUTS(1).propositionBytes == SellerPk.propBytes
 
   // Avoid INPUTS(1) indexing when an optional sponsor is absent.
