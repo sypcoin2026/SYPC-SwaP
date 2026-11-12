@@ -16,10 +16,11 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import sys
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
-SCHEMA = "SYPC_PRIVATE_LAN_READONLY_V1"
+SCHEMA = "SYPC_PRIVATE_LAN_READONLY_V2"
 BASE_URL = "http://127.0.0.1:9053"
 MAX_JSON_BYTES = 262_144
 MAX_CAPTURE_AGE_SECONDS = 900
@@ -91,7 +92,11 @@ def capture(role: str, now=None) -> dict:
     height = _nonnegative_int(info.get("fullHeight"), "fullHeight")
     genesis = _hash64(info.get("genesisBlockId"), "genesisBlockId")
     header = _hash64(info.get("bestFullHeaderId"), "bestFullHeaderId")
+    state_version = _hash64(info.get("stateVersion"), "stateVersion")
     root = _hash64(info.get("stateRoot"), "stateRoot")
+    # The reported full-block tip must actually have been applied to state.
+    if state_version != header:
+        raise GateError("State version does not match the applied full-block tip")
     reported = info.get("isMining", None)
     if reported is not None and type(reported) is not bool:
         raise GateError("isMining must be boolean if present")
@@ -108,6 +113,7 @@ def capture(role: str, now=None) -> dict:
         "fullHeight": height,
         "genesisBlockId": genesis,
         "bestFullHeaderId": header,
+        "stateVersion": state_version,
         "stateRoot": root,
         "connected_peers": len(peers),
         "reported_is_mining": reported,
@@ -117,7 +123,8 @@ def capture(role: str, now=None) -> dict:
 def _validated_snapshot(value, now):
     if not isinstance(value, dict) or set(value) != {
         "schema", "role", "captured_at_utc", "fullHeight",
-        "genesisBlockId", "bestFullHeaderId", "stateRoot", "connected_peers",
+        "genesisBlockId", "bestFullHeaderId", "stateVersion", "stateRoot",
+        "connected_peers",
         "reported_is_mining",
     }:
         raise GateError("Unsupported snapshot structure")
@@ -127,7 +134,10 @@ def _validated_snapshot(value, now):
     _nonnegative_int(value["connected_peers"], "connected_peers")
     _hash64(value["genesisBlockId"], "genesisBlockId")
     _hash64(value["bestFullHeaderId"], "bestFullHeaderId")
+    _hash64(value["stateVersion"], "stateVersion")
     _hash64(value["stateRoot"], "stateRoot")
+    if value["stateVersion"] != value["bestFullHeaderId"]:
+        raise GateError("State version differs from the validated full-block tip")
     reported = value["reported_is_mining"]
     if reported is not None and type(reported) is not bool:
         raise GateError("Invalid mining status")
@@ -160,7 +170,8 @@ def compare(producer: dict, validator: dict, now=None) -> dict:
         raise GateError("A node has no connected peers")
     if producer["fullHeight"] < 1:
         raise GateError("No full blocks validated")
-    for key in ("genesisBlockId", "fullHeight", "bestFullHeaderId", "stateRoot"):
+    for key in ("genesisBlockId", "fullHeight", "bestFullHeaderId",
+                "stateVersion", "stateRoot"):
         if producer[key] != validator[key]:
             raise GateError("Node consensus observations differ: " + key)
     return {
@@ -168,6 +179,7 @@ def compare(producer: dict, validator: dict, now=None) -> dict:
         "fullHeight": producer["fullHeight"],
         "genesisBlockId": producer["genesisBlockId"],
         "bestFullHeaderId": producer["bestFullHeaderId"],
+        "stateVersion": producer["stateVersion"],
         "stateRoot": producer["stateRoot"],
         "requires_separate_genesis_firewall_and_tx_validation": True,
     }
@@ -186,10 +198,19 @@ def _write_private_new_file(path, value: dict):
 
 
 def _read_snapshot(path):
-    dest = Path(path)
-    if not dest.is_file() or dest.stat().st_size > MAX_JSON_BYTES:
-        raise GateError("Snapshot absent or too large")
-    return _parse_json(dest.read_bytes())
+    # Open once and bound bytes even if a file changes between stat and read.
+    # On Linux, O_NOFOLLOW refuses symlinks; never read a device or FIFO.
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(Path(path), flags)
+    with os.fdopen(fd, "rb") as source:
+        metadata = os.fstat(source.fileno())
+        if not stat.S_ISREG(metadata.st_mode):
+            raise GateError("Snapshot must be a regular file")
+        if metadata.st_size > MAX_JSON_BYTES:
+            raise GateError("Snapshot exceeds maximum size")
+        return _parse_json(source.read(MAX_JSON_BYTES + 1))
 
 
 def main(argv=None):
