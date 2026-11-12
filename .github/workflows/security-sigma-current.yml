@@ -1,0 +1,66 @@
+name: Current Sigma contract security gate (research only)
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sigma-research:
+    name: Sigma 4.0.5 current contracts / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    steps:
+      - name: Checkout exact pull request revision without credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Java 11 for pinned Spectrum Sigma 4.0.5
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '11'
+      - name: Pinned sbt launcher
+        uses: sbt/setup-sbt@6c68d2fe8dfbc0a0534d70101baa2e0420e1a506 # v1.1.9
+        with:
+          sbt-runner-version: '1.11.2'
+      - name: Check exact upstream and inspect the complete research source list
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none \
+            https://github.com/spectrum-finance/ergo-dex.git "$RUNNER_TEMP/spectrum"
+          cd "$RUNNER_TEMP/spectrum"
+          git checkout --quiet --detach 8fe94e1f8b4e1ab9402fca6fbc3955e3ad1415f7
+          test "$(git rev-parse HEAD)" = 8fe94e1f8b4e1ab9402fca6fbc3955e3ad1415f7
+          test "$(git hash-object src/test/scala/io/ergodex/core/SigmaPlatform.scala)" = a4b079008592098509cc03bd931a9ef4b5f14518
+          test "$(git hash-object contracts/amm/cfmm/v1/n2t/Pool.sc)" = 16d7040a638ed75d448bb25f1ee8a216ec1afd8b
+          test "$(git hash-object LICENSE)" = 1625c1793607996fcfc46420e8aa2f3d2b7efd1e
+          mkdir -p research/ergo_script
+          for script in AtomicBuy AtomicSell AtomicBuyRefundGuard AtomicSellRefundGuard AtomicBuySponsorRefund AtomicSellSponsorRefund; do
+            test -f "$GITHUB_WORKSPACE/research/ergo_script/${script}.sc"
+            cp "$GITHUB_WORKSPACE/research/ergo_script/${script}.sc" research/ergo_script/
+          done
+          for suite in AtomicScriptCompileSpec AtomicSigmaInterpreterSpec AtomicSignedBranchSpec RefundGuardCompileSpec RefundGuardedSignatureSpec SponsorRefundCompileSpec SponsorRefundSignatureSpec; do
+            test -f "$GITHUB_WORKSPACE/research/scala/${suite}.scala"
+            cp "$GITHUB_WORKSPACE/research/scala/${suite}.scala" src/test/scala/io/ergodex/core/
+          done
+      - name: Compile and execute all SEVEN current Sigma test suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/spectrum"
+          sbt -batch 'testOnly io.ergodex.core.AtomicScriptCompileSpec io.ergodex.core.AtomicSigmaInterpreterSpec io.ergodex.core.AtomicSignedBranchSpec io.ergodex.core.RefundGuardCompileSpec io.ergodex.core.RefundGuardedSignatureSpec io.ergodex.core.SponsorRefundCompileSpec io.ergodex.core.SponsorRefundSignatureSpec' \
+            2>&1 | tee "$RUNNER_TEMP/sigma-test-results.txt"
+          grep -q 'All tests passed\.' "$RUNNER_TEMP/sigma-test-results.txt"
+          grep -Eq 'Total number of tests run: [1-9][0-9]*' "$RUNNER_TEMP/sigma-test-results.txt"
+          for suite in AtomicScriptCompileSpec AtomicSigmaInterpreterSpec AtomicSignedBranchSpec RefundGuardCompileSpec RefundGuardedSignatureSpec SponsorRefundCompileSpec SponsorRefundSignatureSpec; do
+            grep -q "$suite" "$RUNNER_TEMP/sigma-test-results.txt"
+          done
+          echo 'SIGMA_LAB_SEVEN_SUITES_PASS; NOT_SYPC_CONSENSUS'
