@@ -1,0 +1,58 @@
+name: Signed atomic branches (research only)
+
+on:
+  push:
+    branches:
+      - 'work/atomic-signed-branch-security-20261112'
+    paths:
+      - 'research/scala/**'
+      - 'research/ergo_script/**'
+      - '.github/workflows/signed-branch-lab.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signed-branch-validation:
+    name: Real Sigma signature lab / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    steps:
+      - name: Checkout experimental sources
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Pin Java 11 runtime
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '11'
+      - name: Pin sbt launcher
+        uses: sbt/setup-sbt@6c68d2fe8dfbc0a0534d70101baa2e0420e1a506 # v1.1.9
+        with:
+          sbt-runner-version: '1.11.2'
+      - name: Read-only clone exact Spectrum harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none https://github.com/spectrum-finance/ergo-dex.git "$RUNNER_TEMP/spectrum"
+          cd "$RUNNER_TEMP/spectrum"
+          git checkout --quiet --detach 8fe94e1f8b4e1ab9402fca6fbc3955e3ad1415f7
+          test "$(git rev-parse HEAD)" = 8fe94e1f8b4e1ab9402fca6fbc3955e3ad1415f7
+          test "$(git hash-object src/test/scala/io/ergodex/core/SigmaPlatform.scala)" = a4b079008592098509cc03bd931a9ef4b5f14518
+          test "$(git hash-object contracts/amm/cfmm/v1/n2t/Pool.sc)" = 16d7040a638ed75d448bb25f1ee8a216ec1afd8b
+          mkdir -p research/ergo_script
+          cp "$GITHUB_WORKSPACE/research/ergo_script/AtomicBuy.sc" research/ergo_script/
+          cp "$GITHUB_WORKSPACE/research/ergo_script/AtomicSell.sc" research/ergo_script/
+          cp "$GITHUB_WORKSPACE/research/scala/AtomicSignedBranchSpec.scala" src/test/scala/io/ergodex/core/
+      - name: Cryptographic Sigma proof tests for both order sides
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/spectrum"
+          sbt -batch 'testOnly *AtomicSignedBranchSpec'
