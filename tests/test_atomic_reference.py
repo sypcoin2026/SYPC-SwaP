@@ -148,7 +148,15 @@ class SellOrderTests(unittest.TestCase):
         self.assertFalse(original_atomic_predicate(selling(), (token_out(), native_out(reference=OTHER_ID)), False))
 
     def test_wrong_output_position(self):
-        self.assertFalse(original_atomic_predicate(selling(), (native_out(), token_out()), False))
+        # The second output is evaluated: force it below the native payout,
+        # otherwise the source script correctly permits it even with tokens.
+        out1 = SyntheticOutput(OWNER, 0, ((TOKEN_ID, 10),), ORDER_ID)
+        self.assertFalse(original_atomic_predicate(selling(), (native_out(), out1), False))
+
+    def test_seller_allows_extra_tokens_in_payout(self):
+        # Explicitly document the original's actual predicate: a valid
+        # native payout may include tokens. Do not silently add constraints.
+        self.assertTrue(original_atomic_predicate(selling(), (native_out(), token_out()), False))
 
     def test_requires_second_output(self):
         self.assertFalse(original_atomic_predicate(selling(), (native_out(),), False))
