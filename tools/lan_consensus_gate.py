@@ -89,6 +89,7 @@ def capture(role: str, now=None) -> dict:
         raise GateError("Unexpected node API response shape")
 
     height = _nonnegative_int(info.get("fullHeight"), "fullHeight")
+    genesis = _hash64(info.get("genesisBlockId"), "genesisBlockId")
     header = _hash64(info.get("bestFullHeaderId"), "bestFullHeaderId")
     root = _hash64(info.get("stateRoot"), "stateRoot")
     reported = info.get("isMining", None)
@@ -105,6 +106,7 @@ def capture(role: str, now=None) -> dict:
         "role": role,
         "captured_at_utc": now.astimezone(timezone.utc).isoformat(),
         "fullHeight": height,
+        "genesisBlockId": genesis,
         "bestFullHeaderId": header,
         "stateRoot": root,
         "connected_peers": len(peers),
@@ -115,7 +117,7 @@ def capture(role: str, now=None) -> dict:
 def _validated_snapshot(value, now):
     if not isinstance(value, dict) or set(value) != {
         "schema", "role", "captured_at_utc", "fullHeight",
-        "bestFullHeaderId", "stateRoot", "connected_peers",
+        "genesisBlockId", "bestFullHeaderId", "stateRoot", "connected_peers",
         "reported_is_mining",
     }:
         raise GateError("Unsupported snapshot structure")
@@ -123,6 +125,7 @@ def _validated_snapshot(value, now):
         raise GateError("Unsupported schema or role")
     _nonnegative_int(value["fullHeight"], "fullHeight")
     _nonnegative_int(value["connected_peers"], "connected_peers")
+    _hash64(value["genesisBlockId"], "genesisBlockId")
     _hash64(value["bestFullHeaderId"], "bestFullHeaderId")
     _hash64(value["stateRoot"], "stateRoot")
     reported = value["reported_is_mining"]
@@ -157,12 +160,13 @@ def compare(producer: dict, validator: dict, now=None) -> dict:
         raise GateError("A node has no connected peers")
     if producer["fullHeight"] < 1:
         raise GateError("No full blocks validated")
-    for key in ("fullHeight", "bestFullHeaderId", "stateRoot"):
+    for key in ("genesisBlockId", "fullHeight", "bestFullHeaderId", "stateRoot"):
         if producer[key] != validator[key]:
             raise GateError("Node consensus observations differ: " + key)
     return {
         "status": "PASS_READONLY_TIP_CONSISTENCY_ONLY",
         "fullHeight": producer["fullHeight"],
+        "genesisBlockId": producer["genesisBlockId"],
         "bestFullHeaderId": producer["bestFullHeaderId"],
         "stateRoot": producer["stateRoot"],
         "requires_separate_genesis_firewall_and_tx_validation": True,
