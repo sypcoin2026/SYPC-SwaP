@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - 'work/atomic-upstream-validation-20261112'
+    paths:
+      - '.github/workflows/upstream-contract-lab.yml'
+      - 'research/ergo_script/**'
+      - 'research/scala/**'
+      - 'third_party/**'
+      - 'upstreams.lock.json'
 
 permissions:
   contents: read
@@ -81,3 +87,13 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/spectrum-ergo-dex"
           sbt -batch 'testOnly *SwapBuyBoxSpec'
+      - name: Compile candidate SYPC Swap atomic scripts (NO transaction execution)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/spectrum-ergo-dex"
+          mkdir -p research/ergo_script
+          cp "$GITHUB_WORKSPACE/research/ergo_script/AtomicBuy.sc" research/ergo_script/
+          cp "$GITHUB_WORKSPACE/research/ergo_script/AtomicSell.sc" research/ergo_script/
+          cp "$GITHUB_WORKSPACE/research/scala/AtomicScriptCompileSpec.scala" src/test/scala/io/ergodex/core/
+          sbt -batch 'testOnly *AtomicScriptCompileSpec'
