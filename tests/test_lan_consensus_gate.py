@@ -90,9 +90,12 @@ class LanReadonlyGateTests(unittest.TestCase):
         with self.assertRaisesRegex(gate.GateError, "stateRoot"):
             pinned_compare(snapshot(), snapshot("validator", stateRoot="c" * 64), now=NOW)
 
-    def test_zero_connected_peers_is_rejected(self):
-        with self.assertRaisesRegex(gate.GateError, "connected peers"):
-            pinned_compare(snapshot(connected_peers=0), snapshot("validator"), now=NOW)
+    def test_unexpected_private_peer_counts_are_rejected(self):
+        for count in (0, 2, 3):
+            with self.subTest(count=count), self.assertRaisesRegex(
+                gate.GateError, "exactly one private LAN peer"
+            ):
+                pinned_compare(snapshot(connected_peers=count), snapshot("validator"), now=NOW)
 
     def test_no_validated_block_is_rejected(self):
         with self.assertRaisesRegex(gate.GateError, "No full blocks"):
