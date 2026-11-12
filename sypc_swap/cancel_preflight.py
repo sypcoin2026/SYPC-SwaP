@@ -105,7 +105,11 @@ def preflight_single_input_cancel(
         if output.proposition == order.owner_proposition:
             owner_count += 1
             paid_native += output.value
+            tokens_in_box: set[bytes] = set()
             for token_id, amount in output.tokens:
+                if token_id in tokens_in_box:
+                    raise CancelPreflightRejected("duplicate token id in refund output")
+                tokens_in_box.add(token_id)
                 if token_id not in expected:
                     raise CancelPreflightRejected("unknown token in refund")
                 returned_tokens[token_id] = returned_tokens.get(token_id, 0) + amount
