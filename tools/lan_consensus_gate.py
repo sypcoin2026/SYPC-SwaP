@@ -173,8 +173,11 @@ def compare(producer: dict, validator: dict, *, expected_genesis_id: str, now=No
         raise GateError("Reported genesisBlockId does not match independently pinned genesis")
     if abs((a_time - b_time).total_seconds()) > MAX_CAPTURE_SKEW_SECONDS:
         raise GateError("Snapshots not collected close enough in time")
-    if producer["connected_peers"] < 1 or validator["connected_peers"] < 1:
-        raise GateError("A node has no connected peers")
+    # This private laboratory has exactly two nodes; more than one peer per
+    # node is unexpected and must be investigated before running a DEX.
+    # Peer count still does NOT attest the identity or actual IP of the peer.
+    if producer["connected_peers"] != 1 or validator["connected_peers"] != 1:
+        raise GateError("Expected exactly one private LAN peer per node")
     if producer["fullHeight"] < 1:
         raise GateError("No full blocks validated")
     for key in ("genesisBlockId", "fullHeight", "bestFullHeaderId",
