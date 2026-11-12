@@ -12,7 +12,12 @@ class SponsorRefundCompileSpec extends AnyFlatSpec with Matchers {
   private val fee = DLogProverInput(BigInt(987654321).bigInteger).publicImage
   private val feeScript = ErgoTree.fromProposition(SigmaPropConstant(fee)).bytes
 
-  private def bytes(side: String, maxFee: Long, feeBytes: Array[Byte]): Array[Byte] = {
+  private def bytes(
+    side: String, maxFee: Long, feeBytes: Array[Byte],
+    sellTokenId: Array[Byte] = Array.fill[Byte](32)(12),
+    sellTokenAmount: Long = 10L,
+    minNativeAmount: Long = 1000L
+  ): Array[Byte] = {
     val isolated = new SigmaPlatform {}
     val src = isolated.readSource(
       if (side == "buy") "research/ergo_script/AtomicBuySponsorRefund.sc"
@@ -28,7 +33,9 @@ class SponsorRefundCompileSpec extends AnyFlatSpec with Matchers {
       )
       else Map(
         "SellerPk" -> owner,
-        "MinNativeAmount" -> 1000L,
+        "SellTokenId" -> sellTokenId,
+        "SellTokenAmount" -> sellTokenAmount,
+        "MinNativeAmount" -> minNativeAmount,
         "MaxCancelFee" -> maxFee,
         "FeePropBytes" -> feeBytes
       )
@@ -43,6 +50,37 @@ class SponsorRefundCompileSpec extends AnyFlatSpec with Matchers {
   it should "bind exact fee limit and fee script bytes" in {
     bytes("buy", 500L, feeScript).toSeq should not be bytes("buy", 501L, feeScript).toSeq
     bytes("buy", 500L, feeScript).toSeq should not be bytes("buy", 500L, Array.fill[Byte](33)(3)).toSeq
+  }
+
+  "Research contract fixture fingerprints" should "report SHA-256 across runners" in {
+    // The fixture uses synthetic owner/fee keys. These hashes are NOT
+    // production contract addresses or proof of SYPC consensus compatibility.
+    def hash(bytes: Array[Byte]): String =
+      java.security.MessageDigest.getInstance("SHA-256")
+        .digest(bytes).map(b => f"${b & 0xff}%02x").mkString
+
+    val buy = hash(bytes("buy", 500L, feeScript))
+    val sell = hash(bytes("sell", 500L, feeScript))
+    // Cross-run fingerprints confirmed identical on Ubuntu 22.04/24.04.
+    // Any deliberate bytecode change requires a reviewed pin update.
+    buy shouldBe "543bbb47d4a979de5aa2c53623f029bc65105ea00f44091a24cc32ca2b5b3c48"
+    sell shouldBe "bedd2e46febfd259572a2d04285eef37254f4abfdc532df5ea74fc12ea5b6faa"
+    buy should not be sell
+    info(s"FIXTURE_BUY_SHA256=${buy}")
+    info(s"FIXTURE_SELL_SHA256=${sell}")
+  }
+
+  "Sponsor refund sell asset binding" should "bind token ID, exact amount and native price" in {
+    val standard = bytes("sell", 500L, feeScript)
+    standard.toSeq should not be bytes(
+      "sell", 500L, feeScript, sellTokenId = Array.fill[Byte](32)(13)
+    ).toSeq
+    standard.toSeq should not be bytes(
+      "sell", 500L, feeScript, sellTokenAmount = 11L
+    ).toSeq
+    standard.toSeq should not be bytes(
+      "sell", 500L, feeScript, minNativeAmount = 1001L
+    ).toSeq
   }
 
   "Sponsor refund sell candidate" should "compile reproducibly in fresh compilers" in {
