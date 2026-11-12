@@ -7,6 +7,8 @@
 - [x] Propuesta de arquitectura nativa sin puentes y matriz de compatibilidad.
 - [x] Ocho archivos upstream preservados con sus licencias e integridad comprobada.
 - [x] Modelo aritmético AMM offline y comprobador de snapshots: 25 tests sintéticos/aritméticos PASS.
+- [x] Gate experimental de intenciones offline, tests adversariales y CI de solo lectura (PR #5 en borrador).
+- [ ] Configurar proteccion de rama con checks requeridos (issue #6).
 - [ ] Revisión del código/contratos específicos y de sus dependencias.
 - [ ] Decidir licencia propia del proyecto antes de publicar código nuevo reutilizable.
 
