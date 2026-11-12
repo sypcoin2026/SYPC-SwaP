@@ -4,6 +4,8 @@ from dataclasses import FrozenInstanceError, replace
 import random
 import unittest
 
+from sypc_swap.offline_amm import PoolState, quote_exact_in
+
 from sypc_swap.trade_preflight import (
     MAX_I64, NATIVE_ASSET, PoolSnapshot, PreflightRejected,
     TradeIntent, TradePolicy, VerifiedContext, preflight_trade,
@@ -53,6 +55,37 @@ class PreflightSecurityTests(unittest.TestCase):
     def test_immutable_intent(self):
         with self.assertRaises(FrozenInstanceError):
             self.intent.amount_in = 2
+
+    def test_reject_asset_objects_impersonating_native_sypc(self):
+        class NativeImpersonator:
+            def __eq__(self, other):
+                return other == NATIVE_ASSET
+
+        class MisleadingString(str):
+            def __eq__(self, other):
+                return other == NATIVE_ASSET
+
+        for value in (NativeImpersonator(), MisleadingString("fake"),
+                      None, True, b"SYPC_NATIVE", 123):
+            with self.subTest(value=type(value).__name__):
+                with self.assertRaisesRegex(PreflightRejected, "plain string asset"):
+                    self.validate(policy=replace(self.policy, asset_x=value))
+
+    def test_independent_amm_reference_quote_agrees(self):
+        pool = PoolState(self.pool.reserve_x, self.pool.reserve_y,
+                         self.pool.fee_num)
+        self.assertEqual(
+            self.validate().theoretical_amount_out,
+            quote_exact_in(pool, "x", self.intent.amount_in).amount_out,
+        )
+        reversed_intent = replace(
+            self.intent, asset_in=TOKEN, asset_out=NATIVE_ASSET,
+            amount_in=2000, minimum_out=980,
+        )
+        self.assertEqual(
+            self.validate(intent=reversed_intent).theoretical_amount_out,
+            quote_exact_in(pool, "y", 2000).amount_out,
+        )
 
     def test_wrong_chain_rejected_even_with_consistent_attacker_snapshot(self):
         attack_id = "2" * 64
