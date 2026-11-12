@@ -45,7 +45,7 @@ El prototipo `sypc_swap/cancel_preflight.py` **no firma ni ejecuta transacciones
 ## Evidencia verificable
 
 - [Laboratorio Scala: 4/4 tests candidatos PASS](https://github.com/sypcoin2026/SYPC-SwaP/actions/runs/43239483382). Incluye cinco compilaciones adicionales de cada candidato con contextos independientes en una misma ejecución.
-- [Laboratorio Python: 134/134 PASS en 3.12 y 3.13](https://github.com/sypcoin2026/SYPC-SwaP/actions/runs/43240291935). Tests del modelo original, propuestas de trade, AMM, devolución/cancelación estricta, manifiestos de origen y tripwire AST.
+- [Laboratorio Python: 145/145 PASS en 3.12 y 3.13](https://github.com/sypcoin2026/SYPC-SwaP/actions/runs/43241394871). Tests del modelo original, propuestas de trade, AMM, devolución/cancelación estricta, manifiestos de origen y tripwire AST.
 - [Referencias originales de Spectrum: 2 tests PASS](https://github.com/sypcoin2026/SYPC-SwaP/actions/runs/43237243130). No equivale a toda su suite ni a auditoría.
 - `tests/test_atomic_reference.py`, `tests/test_cancel_preflight.py`, `tests/test_trade_preflight.py` contienen entradas adversariales reproducibles.
 
@@ -57,3 +57,9 @@ El prototipo `sypc_swap/cancel_preflight.py` **no firma ni ejecuta transacciones
 
 **Regla de promoción:** `tests Python` ≠ `ErgoTree compila` ≠ `script ejecutado en testnet SYPC` ≠ `fondos seguros`. No fusionar cambios monetarios sin revisión y auditoría externa.
 
+
+## Endurecimiento CI adicional
+
+Se ha añadido un tripwire de workflows (`tools/audit_ci_workflows.py`) con tests negativos (`tests/test_audit_ci_workflows.py`) que rechaza **acciones directas sin SHA**, permisos GitHub de escritura y activadores elevados (por ejemplo `pull_request_target`). El workflow principal ejecuta esta comprobación antes de los tests. La ejecución con 145 tests en Python 3.12/3.13 es [43241394871](https://github.com/sypcoin2026/SYPC-SwaP/actions/runs/43241394871).
+
+**Límite:** el análisis es textual, no un validador YAML completo ni una atestación de dependencias transitivas de las acciones. La API reportó que no hay rulesets configurados en el repo; es necesario habilitar protección obligatoria de `main` y revisión humana (issue #6). Sin esa regla, un CI verde no bloquea por sí solo una fusión peligrosa.

@@ -29,6 +29,9 @@
 - [ ] Compilar y ejecutar los contratos portados en nodo SYPC de laboratorio independiente.
 - [ ] Auditoría de claves, cambios de UTXO, tokens, fees y reorgs de la transacción **completa**, no sólo de un predicado.
 
+- [x] Audit de workflows y permisos de GitHub agregado a CI, con **145/145 tests PASS** (Python 3.12 y 3.13).
+- [ ] **Bloqueo P0:** habilitar ruleset de `main` con CI obligatorio y revisión humana (issue #6).
+
 ## P2 — Intercambio atómico [pendiente]
 
 - [ ] Seleccionar contrato origen y preparar port aislado con licencia/procedencia.
