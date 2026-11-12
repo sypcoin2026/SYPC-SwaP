@@ -24,6 +24,7 @@ def snapshot(role="producer", **changes):
         "fullHeight": 377,
         "genesisBlockId": GENESIS,
         "bestFullHeaderId": HEADER,
+        "stateVersion": HEADER,
         "stateRoot": ROOT,
         "connected_peers": 1,
         "reported_is_mining": False,
@@ -48,8 +49,17 @@ class LanReadonlyGateTests(unittest.TestCase):
             gate.compare(snapshot(), snapshot("validator", fullHeight=376), now=NOW)
 
     def test_mismatched_header_is_rejected(self):
+        # Both nodes may be internally consistent but disagree with each other.
         with self.assertRaisesRegex(gate.GateError, "bestFullHeaderId"):
-            gate.compare(snapshot(), snapshot("validator", bestFullHeaderId="c" * 64), now=NOW)
+            gate.compare(snapshot(), snapshot(
+                "validator", bestFullHeaderId="c" * 64, stateVersion="c" * 64,
+            ), now=NOW)
+
+    def test_state_version_lag_blocks_a_false_pass(self):
+        # Two nodes with the same apparent full tip but stale state are unsafe.
+        with self.assertRaisesRegex(gate.GateError, "State version"):
+            gate.compare(snapshot(stateVersion="d" * 64),
+                         snapshot("validator", stateVersion="d" * 64), now=NOW)
 
     def test_mismatched_state_root_is_rejected(self):
         with self.assertRaisesRegex(gate.GateError, "stateRoot"):
@@ -83,6 +93,7 @@ class LanReadonlyGateTests(unittest.TestCase):
             (snapshot(schema="WRONG"), snapshot("validator")),
             (snapshot(), snapshot("validator", stateRoot="0x" + ROOT)),
             (snapshot(), snapshot("validator", bestFullHeaderId="A" * 64)),
+            (snapshot(), snapshot("validator", stateVersion="A" * 64)),
             (snapshot(), snapshot("validator", fullHeight=True)),
             (snapshot(), snapshot("validator", connected_peers=-1)),
             (snapshot(), snapshot("validator", reported_is_mining="false")),
@@ -100,7 +111,7 @@ class LanReadonlyGateTests(unittest.TestCase):
     def test_capture_reads_only_local_info_and_peers(self):
         info = {
             "fullHeight": 377, "genesisBlockId": GENESIS,
-            "bestFullHeaderId": HEADER, "stateRoot": ROOT,
+            "bestFullHeaderId": HEADER, "stateVersion": HEADER, "stateRoot": ROOT,
             "isMining": False,
         }
         calls = []
@@ -113,16 +124,27 @@ class LanReadonlyGateTests(unittest.TestCase):
         self.assertEqual(s["connected_peers"], 1)
         self.assertEqual(s["fullHeight"], 377)
         self.assertEqual(s["genesisBlockId"], GENESIS)
+        self.assertEqual(s["stateVersion"], HEADER)
         self.assertNotIn("placeholder", json.dumps(s))
 
     def test_capture_rejects_enabled_validator_mining(self):
         with patch.object(gate, "_get_local_json", side_effect=[
             {"fullHeight": 377, "genesisBlockId": GENESIS,
-             "bestFullHeaderId": HEADER, "stateRoot": ROOT, "isMining": True},
+             "bestFullHeaderId": HEADER, "stateVersion": HEADER, "stateRoot": ROOT, "isMining": True},
             [],
         ]):
             with self.assertRaises(gate.GateError):
                 gate.capture("validator", now=NOW)
+
+    def test_capture_rejects_unapplied_full_tip(self):
+        with patch.object(gate, "_get_local_json", side_effect=[
+            {"fullHeight": 377, "genesisBlockId": GENESIS,
+             "bestFullHeaderId": HEADER, "stateVersion": "d" * 64,
+             "stateRoot": ROOT, "isMining": False},
+            [{"name": "peer"}],
+        ]):
+            with self.assertRaisesRegex(gate.GateError, "State version"):
+                gate.capture("producer", now=NOW)
 
     def test_capture_rejects_malformed_node_metadata(self):
         with patch.object(gate, "_get_local_json", side_effect=[
@@ -142,6 +164,27 @@ class LanReadonlyGateTests(unittest.TestCase):
                      b"not-json", b"\xff"):
             with self.subTest(length=len(body)), self.assertRaises(gate.GateError):
                 gate._parse_json(body)
+
+    def test_reject_nonregular_and_oversized_snapshot_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            with self.assertRaisesRegex(gate.GateError, "regular file"):
+                gate._read_snapshot(folder)
+            huge = folder / "huge.json"
+            huge.write_bytes(b"x" * (gate.MAX_JSON_BYTES + 2))
+            with self.assertRaisesRegex(gate.GateError, "maximum size"):
+                gate._read_snapshot(huge)
+
+    @unittest.skipUnless(hasattr(os, "O_NOFOLLOW"), "requires O_NOFOLLOW")
+    def test_snapshot_symlink_is_not_followed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            target = folder / "real.json"
+            gate._write_private_new_file(target, snapshot())
+            link = folder / "link.json"
+            link.symlink_to(target)
+            with self.assertRaises(OSError):
+                gate._read_snapshot(link)
 
     def test_snapshot_is_written_once_with_private_permissions(self):
         with tempfile.TemporaryDirectory() as tmp:
