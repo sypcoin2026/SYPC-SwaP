@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: sypc-sigma-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   sigma-research:
     name: Sigma 4.0.5 current contracts / ${{ matrix.os }}
@@ -51,16 +55,29 @@ jobs:
             test -f "$GITHUB_WORKSPACE/research/scala/${suite}.scala"
             cp "$GITHUB_WORKSPACE/research/scala/${suite}.scala" src/test/scala/io/ergodex/core/
           done
-      - name: Compile and execute all SEVEN current Sigma test suites
+      - name: Run seven suites in separate sbt processes (avoid shared Sigma compiler state)
         shell: bash
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/spectrum"
-          sbt -batch 'testOnly io.ergodex.core.AtomicScriptCompileSpec io.ergodex.core.AtomicSigmaInterpreterSpec io.ergodex.core.AtomicSignedBranchSpec io.ergodex.core.RefundGuardCompileSpec io.ergodex.core.RefundGuardedSignatureSpec io.ergodex.core.SponsorRefundCompileSpec io.ergodex.core.SponsorRefundSignatureSpec' \
-            2>&1 | tee "$RUNNER_TEMP/sigma-test-results.txt"
-          grep -q 'All tests passed\.' "$RUNNER_TEMP/sigma-test-results.txt"
-          grep -Eq 'Total number of tests run: [1-9][0-9]*' "$RUNNER_TEMP/sigma-test-results.txt"
-          for suite in AtomicScriptCompileSpec AtomicSigmaInterpreterSpec AtomicSignedBranchSpec RefundGuardCompileSpec RefundGuardedSignatureSpec SponsorRefundCompileSpec SponsorRefundSignatureSpec; do
-            grep -q "$suite" "$RUNNER_TEMP/sigma-test-results.txt"
+          # SigmaPlatform uses process-local compiler state; a combined ScalaTest
+          # invocation produced intermittent "_sourceContext can be set only once".
+          # Each suite gets a clean sbt/JVM; retain the original 70-test baseline.
+          for entry in \
+            AtomicScriptCompileSpec:4 \
+            AtomicSigmaInterpreterSpec:12 \
+            AtomicSignedBranchSpec:8 \
+            RefundGuardCompileSpec:4 \
+            RefundGuardedSignatureSpec:13 \
+            SponsorRefundCompileSpec:4 \
+            SponsorRefundSignatureSpec:25; do
+            suite="${entry%%:*}"
+            minimum="${entry##*:}"
+            logfile="$RUNNER_TEMP/${suite}.log"
+            sbt -batch "testOnly io.ergodex.core.${suite}" 2>&1 | tee "$logfile"
+            grep -q 'All tests passed\.' "$logfile"
+            count="$(sed -nE 's/.*Total number of tests run: ([0-9]+).*/\1/p' "$logfile" | tail -n 1)"
+            test -n "$count" && test "$count" -ge "$minimum"
+            echo "SIGMA_SUITE_PASS ${suite}: ${count} tests (minimum ${minimum})"
           done
-          echo 'SIGMA_LAB_SEVEN_SUITES_PASS; NOT_SYPC_CONSENSUS'
+          echo 'SIGMA_LAB_SEVEN_ISOLATED_SUITES_PASS; NOT_SYPC_CONSENSUS'
