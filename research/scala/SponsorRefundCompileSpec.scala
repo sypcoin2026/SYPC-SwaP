@@ -52,6 +52,22 @@ class SponsorRefundCompileSpec extends AnyFlatSpec with Matchers {
     bytes("buy", 500L, feeScript).toSeq should not be bytes("buy", 500L, Array.fill[Byte](33)(3)).toSeq
   }
 
+  "Research contract fixture fingerprints" should "report SHA-256 across runners" in {
+    // The fixture uses synthetic owner/fee keys. These hashes are NOT
+    // production contract addresses or proof of SYPC consensus compatibility.
+    def hash(bytes: Array[Byte]): String =
+      java.security.MessageDigest.getInstance("SHA-256")
+        .digest(bytes).map(b => f"${b & 0xff}%02x").mkString
+
+    val buy = hash(bytes("buy", 500L, feeScript))
+    val sell = hash(bytes("sell", 500L, feeScript))
+    buy.length shouldBe 64
+    sell.length shouldBe 64
+    buy should not be sell
+    info(s"FIXTURE_BUY_SHA256=${buy}")
+    info(s"FIXTURE_SELL_SHA256=${sell}")
+  }
+
   "Sponsor refund sell asset binding" should "bind token ID, exact amount and native price" in {
     val standard = bytes("sell", 500L, feeScript)
     standard.toSeq should not be bytes(
