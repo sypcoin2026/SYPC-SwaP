@@ -100,7 +100,13 @@ class SponsorRefundSignatureSpec extends AnyFlatSpec with Matchers {
       .toBox(ErgoBox.allZerosModifierId, 1.toShort)
     val third = new ErgoBoxCandidate(50L, ownerTree, 0)
       .toBox(ErgoBox.allZerosModifierId, 2.toShort)
-    val spending = if (!sponsored) IndexedSeq(self)
+    // A positive SELL fill must not mint native coins from thin air:
+    // the buyer adds 1,001,000 to SELF's 2,000,000, matching both outputs.
+    val buyerFunding = new ErgoBoxCandidate(1001000L, thirdTree, 0)
+      .toBox(ErgoBox.allZerosModifierId, 3.toShort)
+    val spending = if (side == "sell" && scenario.startsWith("fill"))
+      IndexedSeq(self, buyerFunding)
+    else if (!sponsored) IndexedSeq(self)
       else if (scenario == "sponsor-three-inputs") IndexedSeq(self, extra, third)
       else if (scenario == "sponsor-duplicate-self") IndexedSeq(self, self)
       else IndexedSeq(self, extra)
@@ -126,7 +132,8 @@ class SponsorRefundSignatureSpec extends AnyFlatSpec with Matchers {
         val payoutTokens = if (name == "fill-tokens-in-payout")
           tokens(otherToken, 1L) else noTokens
         IndexedSeq(
-          new ErgoBoxCandidate(1000000L, thirdTree, 0),
+          // Transfer the entire locked token inventory to the buyer.
+          new ErgoBoxCandidate(1000000L, thirdTree, 0, locked),
           new ErgoBoxCandidate(
             payout, ownerTree, 0, payoutTokens,
             Map(ErgoBox.R4 -> ByteArrayConstant(self.id))
@@ -275,6 +282,41 @@ class SponsorRefundSignatureSpec extends AnyFlatSpec with Matchers {
   }
   it should "preserve unsigned successful fill" in {
     authorized("sell", "fill", None) shouldBe true
+  }
+
+  "Asset-bound sell fill with buyer funding" should "preserve assets and verify both input scripts" in {
+    // Closer to a real spend than standalone Sigma predicate checks:
+    // two inputs, no implicit token issuance, and buyer's input signed.
+    // Still NOT a full node, miner-fee, mempool or consensus validation.
+    val (sellTree, unsignedCtx) = context("sell", "fill")
+    unsignedCtx.boxesToSpend.size shouldBe 2
+    val proposal = unsignedCtx.spendingTransaction
+    val message = proposal.messageToSign
+
+    unsignedCtx.boxesToSpend.map(b => BigInt(b.value)).sum shouldBe
+      proposal.outputCandidates.map(b => BigInt(b.value)).sum
+    unsignedCtx.boxesToSpend.flatMap(b => b.tokens.toArray) shouldBe
+      proposal.outputCandidates.flatMap(b => b.tokens.toArray)
+
+    implicit val ir: IRContext = new RuntimeIRContext
+    val buyerCtx = ErgoLikeContext.copy(unsignedCtx)(selfIndex = 1)
+    val buyerProver = new ErgoLikeInterpreter with ProverInterpreter {
+      override type CTX = ErgoLikeContext
+      override val secrets = Seq(thirdSk)
+    }
+    val buyerProof = buyerProver.prove(buyerCtx.self.ergoTree, buyerCtx, message).get
+    val signed = ErgoLikeTransaction(
+      IndexedSeq(
+        Input(unsignedCtx.boxesToSpend(0).id, ProverResult.empty),
+        Input(unsignedCtx.boxesToSpend(1).id, buyerProof)
+      ), proposal.outputCandidates
+    )
+    java.util.Arrays.equals(signed.messageToSign, message) shouldBe true
+    val verifier = new ErgoLikeInterpreter { override type CTX = ErgoLikeContext }
+    verifier.verify(sellTree, unsignedCtx.withTransaction(signed),
+      ProverResult.empty, message).get._1 shouldBe true
+    verifier.verify(buyerCtx.self.ergoTree, buyerCtx.withTransaction(signed),
+      buyerProof, message).get._1 shouldBe true
   }
 
   "Asset-bound sell fill" should "reject wrong token and non-exact inventory" in {
