@@ -33,21 +33,32 @@ object NativeSigma607InterpreterSmoke {
   }
   private val signedMessage = Array.fill[Byte](32)(42)
 
-  private def contracts(path: String): ErgoTree = {
+  // Both scripts share the exact Sigma 6.0.7 compiler, without mutating
+  // their original ErgoScript sources or the actual SYPC consensus.
+  private def compileScript(path: String, env: Map[String, Any]): ErgoTree = {
     val file = Paths.get(path).toRealPath()
     require(Files.isRegularFile(file), "SYPC607_SCRIPT_NOT_FOUND")
     val source = new String(Files.readAllBytes(file), UTF_8)
-    val env: Map[String, Any] = Map(
-      "SellerPk" -> feeOwner.publicImage,
-      "SellTokenId" -> Array.fill[Byte](32)(12),
-      "SellTokenAmount" -> 10L,
-      "MinNativeAmount" -> 1000L,
-      "MaxCancelFee" -> 500L,
-      "FeePropBytes" -> recipientTree.bytes
-    )
     val bytes = NativeSigma607Compile.compile(source, env)
     sigma.serialization.ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(bytes)
   }
+
+  private def sellContract(path: String): ErgoTree = compileScript(path, Map(
+    "SellerPk" -> feeOwner.publicImage,
+    "SellTokenId" -> Array.fill[Byte](32)(12),
+    "SellTokenAmount" -> 10L,
+    "MinNativeAmount" -> 1000L,
+    "MaxCancelFee" -> 500L,
+    "FeePropBytes" -> recipientTree.bytes
+  ))
+
+  private def buyContract(path: String): ErgoTree = compileScript(path, Map(
+    "BuyerPk" -> buyer.publicImage,
+    "TokenId" -> Array.fill[Byte](32)(12),
+    "MinTokenAmount" -> 100L,
+    "MaxCancelFee" -> 500L,
+    "FeePropBytes" -> recipientTree.bytes
+  ))
 
   private def assets(mode: String): Coll[ErgoBox.Token] = mode match {
     case "wrong-token" => Colls.fromArray(Array((otherId, 10L)))
@@ -79,13 +90,8 @@ object NativeSigma607InterpreterSmoke {
       new ErgoBoxCandidate(1000000L, buyerTree, 0, tokens),
       new ErgoBoxCandidate(payment, owner, 0, outputTokens, mark)
     )
-    val unsigned = UnsignedErgoLikeTransaction(
-      IndexedSeq(new UnsignedInput(self.id), new UnsignedInput(payer.id)),
-      outputs
-    )
-
     // Conservation here checks only fixture arithmetic; it is NOT a core
-    // UTXO validation, mempool check, or actual signed transaction.
+    // UTXO validation, mempool check, or an actual signed transaction.
     if (scenario == "valid") {
       require(IndexedSeq(self, payer).map(_.value).sum ==
         outputs.map(_.value).sum, "SYPC607_FIXTURE_NATIVE_IMBALANCE")
@@ -93,6 +99,17 @@ object NativeSigma607InterpreterSmoke {
         "SYPC607_FIXTURE_TOKEN_IMBALANCE")
     }
 
+    verify(tree, self, payer, outputs)
+  }
+
+  private def verify(
+    tree: ErgoTree, self: ErgoBox, payer: ErgoBox,
+    outputs: IndexedSeq[ErgoBoxCandidate]
+  ): Boolean = {
+    val unsigned = UnsignedErgoLikeTransaction(
+      IndexedSeq(new UnsignedInput(self.id), new UnsignedInput(payer.id)),
+      outputs
+    )
     val context = new ErgoLikeContext(
       AvlTreeData.dummy,
       Colls.emptyColl[Header],
@@ -115,21 +132,70 @@ object NativeSigma607InterpreterSmoke {
       Array.empty[Byte], signedMessage).get._1
   }
 
+  private def evaluateBuy(tree: ErgoTree, scenario: String): Boolean = {
+    val tokenAmount = if (scenario == "too-few") 99L else 100L
+    val selectedToken = if (scenario == "wrong-token") otherId else sellId
+    val tokens: Coll[ErgoBox.Token] =
+      if (scenario == "no-tokens") Colls.emptyColl[ErgoBox.Token]
+      else Colls.fromArray(Array((selectedToken, tokenAmount)))
+
+    val self = new ErgoBoxCandidate(2000000L, tree, 0)
+      .toBox(ErgoBox.allZerosModifierId, 0.toShort)
+    val payer = new ErgoBoxCandidate(
+      1001000L, recipientTree, 0,
+      Colls.fromArray(Array((sellId, 100L)))
+    ).toBox(ErgoBox.allZerosModifierId, 1.toShort)
+    val wrongDestination = scenario == "wrong-owner"
+    val payTo = if (wrongDestination) recipientTree else buyerTree
+    val mark: Map[ErgoBox.NonMandatoryRegisterId, sigma.ast.EvaluatedValue[_ <: sigma.ast.SType]] =
+      if (scenario == "no-order-id") Map.empty
+      else Map(ErgoBox.R4 -> (
+        if (scenario == "wrong-order-id") ByteArrayConstant(Array.fill[Byte](32)(7))
+        else ByteArrayConstant(self.id)
+      ))
+
+    val buyerOutput = new ErgoBoxCandidate(1000000L, payTo, 0, tokens, mark)
+    val sellerOutput = new ErgoBoxCandidate(2001000L, recipientTree, 0)
+    val outputs = if (scenario == "wrong-output-order")
+      IndexedSeq(sellerOutput, buyerOutput)
+      else IndexedSeq(buyerOutput, sellerOutput)
+
+    if (scenario == "valid") {
+      require(self.value + payer.value == outputs.map(_.value).sum,
+        "SYPC607_BUY_FIXTURE_NATIVE_IMBALANCE")
+      require(payer.additionalTokens == buyerOutput.additionalTokens,
+        "SYPC607_BUY_FIXTURE_TOKEN_IMBALANCE")
+    }
+    verify(tree, self, payer, outputs)
+  }
+
   def main(args: Array[String]): Unit = {
-    require(args.length == 1, "SYPC607_SCRIPT_ROOT_REQUIRED")
-    val script = contracts(args(0))
-    require(evaluate(script, "valid"), "SYPC607_VALID_SELL_REJECTED")
+    require(args.length == 2, "SYPC607_SELL_AND_BUY_SCRIPT_PATHS_REQUIRED")
+    val sell = sellContract(args(0))
+    require(evaluate(sell, "valid"), "SYPC607_VALID_SELL_REJECTED")
     println("SIGMA607_INTERPRETER_PASS:valid")
 
     val bad = Vector("wrong-token", "too-few", "too-many", "no-tokens",
       "extra-token", "underpay", "wrong-owner", "wrong-order-id",
       "no-order-id", "seller-gets-token")
     bad.foreach { scenario =>
-      require(!evaluate(script, scenario),
+      require(!evaluate(sell, scenario),
         "SYPC607_MALICIOUS_SELL_ACCEPTED:" + scenario)
       println("SIGMA607_INTERPRETER_REJECT:" + scenario)
     }
     println("SIGMA607_INTERPRETER_SELL_SYNTHETIC_11_CASES_PASS")
+
+    val buy = buyContract(args(1))
+    require(evaluateBuy(buy, "valid"), "SYPC607_VALID_BUY_REJECTED")
+    println("SIGMA607_BUY_PASS:valid")
+    val maliciousBuy = Vector("wrong-token", "too-few", "no-tokens",
+      "wrong-owner", "wrong-order-id", "no-order-id", "wrong-output-order")
+    maliciousBuy.foreach { scenario =>
+      require(!evaluateBuy(buy, scenario),
+        "SYPC607_MALICIOUS_BUY_ACCEPTED:" + scenario)
+      println("SIGMA607_BUY_REJECT:" + scenario)
+    }
+    println("SIGMA607_BUY_SYNTHETIC_8_CASES_PASS")
     println("NOT_SYPC_NODE_CONSENSUS_NOT_A_FULL_SIGNED_TRANSACTION")
   }
 }
