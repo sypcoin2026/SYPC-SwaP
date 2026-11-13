@@ -41,7 +41,7 @@ object NativeSigma607Compile {
     new String(bytes, UTF_8)
   }
 
-  private def compile(src: String, env: Map[String, Any]): Array[Byte] = {
+  private[swap] def compile(src: String, env: Map[String, Any]): Array[Byte] = {
     // A fresh IR context and compiler avoid process-global compiler-test state.
     implicit val ir: CompiletimeIRContext = new CompiletimeIRContext
     val result = SigmaCompiler(0x30.toByte).compile(env, src)
