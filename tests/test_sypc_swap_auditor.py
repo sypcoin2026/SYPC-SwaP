@@ -76,6 +76,12 @@ class AuditorTests(unittest.TestCase):
     def attach(self, name, *, status="PASS", exit_code=0, body=None, phase=None):
         if body is None:
             body = "SYPC_AUDIT_CHECK_PASS:" + name + "\n"
+            if self.r["phase"] in ("native", "two_node"):
+                body += (
+                    "SYPC_AUDIT_NATIVE_SIGMA:6.0.7\n"
+                    "SYPC_AUDIT_CORE_COMMIT:" + CORE + "\n"
+                    "SYPC_AUDIT_SWAP_COMMIT:" + SWAP + "\n"
+                )
         filename = name + ".log"
         data = body.encode("utf-8")
         (self.folder / filename).write_bytes(data)
@@ -157,6 +163,34 @@ class AuditorTests(unittest.TestCase):
     def test_policy_cannot_silently_downgrade_native_version(self):
         self.p["native_sigma_version"] = "4.0.5"
         with self.assertRaisesRegex(auditor.AuditError, "6.0.7"):
+            self.inspect()
+
+    def test_native_report_claims_only_metadata_verification(self):
+        self.r = run("native")
+        self.complete()
+        result = self.inspect()
+        self.assertEqual(result["status"], "PASS_EVIDENCE_INTEGRITY_ONLY")
+        self.assertFalse(result["native_compatibility_demonstrated"])
+        self.assertFalse(result["ready_for_funds"])
+
+    def test_native_rejects_old_sigma_engine_in_artifact(self):
+        self.r = run("native")
+        self.attach("native_contract_compile", body=(
+            "SYPC_AUDIT_CHECK_PASS:native_contract_compile\n"
+            "SYPC_AUDIT_NATIVE_SIGMA:4.0.5\n"
+            "SYPC_AUDIT_CORE_COMMIT:" + CORE + "\n"
+            "SYPC_AUDIT_SWAP_COMMIT:" + SWAP + "\n"
+        ))
+        with self.assertRaisesRegex(auditor.AuditError, "native engine"):
+            self.inspect()
+
+    def test_native_rejects_missing_commit_marker(self):
+        self.r = run("native")
+        self.attach("native_contract_compile", body=(
+            "SYPC_AUDIT_CHECK_PASS:native_contract_compile\n"
+            "SYPC_AUDIT_NATIVE_SIGMA:6.0.7\n"
+        ))
+        with self.assertRaisesRegex(auditor.AuditError, "native engine"):
             self.inspect()
 
     def test_offline_reference_version_is_explicitly_required(self):
