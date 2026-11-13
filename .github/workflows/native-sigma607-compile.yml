@@ -1,4 +1,4 @@
-name: Native Sigma 6.0.7 compile-only compatibility (NOT SYPC consensus)
+name: Native Sigma 6.0.7 compile and script smoke (NOT SYPC node)
 
 on:
   pull_request:
@@ -52,3 +52,15 @@ jobs:
             | tee "$RUNNER_TEMP/native6-review.json"
           grep -q '"status": "PASS_PINNED_SIGMA607_COMPILER_ONLY"' "$RUNNER_TEMP/native6-review.json"
           echo "NATIVE_SIGMA607_COMPILER_GATE_PASS; NO_NATIVE_SYPC_TX_EXECUTION"
+      - name: Execute synthetic SELL with real Sigma 6.0.7 interpreter
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd research/native6
+          sbt -batch 'runMain org.sypcoin.swap.NativeSigma607InterpreterSmoke ../ergo_script/AtomicSellSponsorRefund.sc' \
+            2>&1 | tee "$RUNNER_TEMP/sigma607-interpreter.log"
+          test "$(grep -c 'SIGMA607_INTERPRETER_REJECT:' "$RUNNER_TEMP/sigma607-interpreter.log")" -eq 10
+          grep -q 'SIGMA607_INTERPRETER_PASS:valid' "$RUNNER_TEMP/sigma607-interpreter.log"
+          grep -q 'SIGMA607_INTERPRETER_SELL_SYNTHETIC_11_CASES_PASS' "$RUNNER_TEMP/sigma607-interpreter.log"
+          grep -q 'NOT_SYPC_NODE_CONSENSUS_NOT_A_FULL_SIGNED_TRANSACTION' "$RUNNER_TEMP/sigma607-interpreter.log"
+          echo "SIGMA607_SYNTHETIC_SELL_PASS; NOT_SYPC_NATIVE_CORE"
