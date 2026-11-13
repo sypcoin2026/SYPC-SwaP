@@ -30,10 +30,77 @@ def log_lines(manifest):
     return "\n".join(lines) + "\n"
 
 
+def interpreter_log():
+    return "\n".join(
+        ["[info] SIGMA607_INTERPRETER_PASS:valid"]
+        + ["[info] SIGMA607_INTERPRETER_REJECT:" + scenario
+           for scenario in sorted(checker.SELL_REJECTIONS)]
+        + [
+            "[info] " + checker.INTERPRETER_END,
+            "[info] " + checker.INTERPRETER_SCOPE,
+        ]
+    ) + "\n"
+
+
 class Native6ReviewTests(unittest.TestCase):
     def setUp(self):
         self.manifest = checker.read_manifest(PINS)
         self.good = log_lines(self.manifest)
+
+    def test_interpreter_evidence_has_one_pass_and_ten_distinct_rejections(self):
+        result = checker.inspect_interpreter_log(interpreter_log())
+        self.assertEqual(result["status"], "PASS_SIGMA607_SELL_INTERPRETER_TRACE_ONLY")
+        self.assertEqual(result["positive"], 1)
+        self.assertEqual(len(result["negative_scenarios"]), 10)
+        self.assertFalse(result["native_consensus_proven"])
+
+    def test_interpreter_missing_or_repeated_negative_is_rejected(self):
+        name = sorted(checker.SELL_REJECTIONS)[0]
+        line = "[info] SIGMA607_INTERPRETER_REJECT:" + name
+        with self.assertRaisesRegex(checker.FingerprintError, "Incomplete"):
+            checker.inspect_interpreter_log(
+                interpreter_log().replace(line + "\n", "", 1))
+        with self.assertRaisesRegex(checker.FingerprintError, "duplicate"):
+            checker.inspect_interpreter_log(interpreter_log() + line + "\n")
+
+    def test_interpreter_invalid_positive_and_wrong_case_are_rejected(self):
+        with self.assertRaisesRegex(checker.FingerprintError, "positive"):
+            checker.inspect_interpreter_log(
+                interpreter_log().replace(
+                    "SIGMA607_INTERPRETER_PASS:valid",
+                    "SIGMA607_INTERPRETER_PASS:maybe", 1))
+        with self.assertRaisesRegex(checker.FingerprintError, "positive"):
+            checker.inspect_interpreter_log(
+                interpreter_log() + "SIGMA607_INTERPRETER_PASS:valid\n")
+        with self.assertRaisesRegex(checker.FingerprintError, "negative"):
+            checker.inspect_interpreter_log(
+                interpreter_log() + "SIGMA607_INTERPRETER_REJECT:not-a-test\n")
+
+    def test_interpreter_missing_scope_or_finish_marker_is_blocked(self):
+        for marker in (checker.INTERPRETER_END, checker.INTERPRETER_SCOPE):
+            with self.subTest(marker=marker):
+                with self.assertRaisesRegex(checker.FingerprintError, "Incomplete"):
+                    checker.inspect_interpreter_log(interpreter_log().replace(marker, ""))
+
+    def test_interpreter_error_overrides_reported_success(self):
+        with self.assertRaisesRegex(checker.FingerprintError, "failure"):
+            checker.inspect_interpreter_log(
+                interpreter_log() + "[error] failure\n")
+
+    def test_two_independent_log_gates_are_required_for_combined_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            compile_log = root / "compiler.log"
+            interpreter = root / "interpreter.log"
+            compile_log.write_text(self.good)
+            interpreter.write_text(interpreter_log())
+            result = checker.review(PINS, compile_log, interpreter)
+            self.assertEqual(result["status"],
+                             "PASS_PINNED_SIGMA607_COMPILER_AND_SCRIPT_TRACE_ONLY")
+            self.assertFalse(result["ready_for_funds"])
+            interpreter.write_text("wrong")
+            result = checker.review(PINS, compile_log, interpreter)
+            self.assertEqual(result["status"], "FAIL")
 
     def test_six_pinned_contracts_pass_but_never_authorize_funds(self):
         result = checker.inspect(self.manifest, self.good)
