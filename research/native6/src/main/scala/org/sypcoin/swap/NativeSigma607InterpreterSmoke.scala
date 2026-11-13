@@ -14,6 +14,7 @@ import sigma.crypto.CryptoConstants
 import sigma.data.{AvlTreeData, Digest32Coll}
 import sigma.interpreter.ContextExtension
 import sigma.serialization.{GroupElementSerializer, SigmaSerializer}
+import sigma.util.Extensions.EcpOps
 
 /** Executes a *synthetic* SELL fill in the real Sigma 6.0.7 interpreter.
   *
