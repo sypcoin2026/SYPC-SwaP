@@ -17,6 +17,21 @@ Un subproyecto Scala 2.12.20/SBT 1.11.1 vive exclusivamente en `research/native6
 - Los resultados imprimen la huella SHA-256 del ErgoTree para que los dos runners puedan compararse y, tras revisión, se fije un pin en una regresión posterior.
 - CI en Ubuntu 22.04 y 24.04 con Java 11, acciones y sbt launcher fijados a SHA.
 
+## Primer resultado comprobado y fijado
+
+- [Primera ejecución GitHub Actions #43525232904](https://github.com/sypcoin2026/SYPC-SwaP/actions/runs/43525232904): seis compilaciones `Sigma 6.0.7` completas en Ubuntu 22.04 y 24.04, con huellas byte a byte idénticas por contrato y JAR efectivo validado. Esto **no** es una prueba de gasto.
+- El manifiesto `research/native6/fingerprints.json` fija seis pares `sha256` y `bytes`. Son hashes obtenidos de esas dos ejecuciones con parámetros sintéticos, **no hashes de producción** ni prueba de que un nodo SYPC los acepte.
+- `tools/review_native6_compilation.py` se ejecuta **fuera del proceso compilador** y valida los seis resultados, su unicidad, el hash fijado, la longitud y las marcas de finalización. Esto detecta deriva o datos incompletos; quien pueda modificar el manifiesto y el log puede engañar al revisor, por lo que sigue siendo imprescindible revisión de PR y atestación futura.
+
+| Script experimental | SHA-256 de ErgoTree (Sigma 6.0.7) |
+| --- | --- |
+| `AtomicBuy.sc` | `9566b770f5d4002904058a8d72d97f7ecf1af52afb16d9d2157408af20787e5f` |
+| `AtomicSell.sc` | `fe1de0f5b3eb59f0f21aebd8e52d916eff25513a968bc10f5cd0839e2e58634b` |
+| `AtomicBuyRefundGuard.sc` | `f389d6e4bd9ca3962058557eb6c4eff7e452f4079ddcdd088ac7a5b4d91968ff` |
+| `AtomicSellRefundGuard.sc` | `0f8b40030ff0d473a440022cc2f82dcf0ad0e91f911a6b7f7a894d5ba0e0f09d` |
+| `AtomicBuySponsorRefund.sc` | `710d9dace0612ca11058f0d6bb6a7268c792220862b21bc4b01fb21116727746` |
+| `AtomicSellSponsorRefund.sc` | `b0200387c8c3818b4228bf4dbd7db2ba352961dc6ec73165632d3cd0116e69fe` |
+
 ## Niveles de evidencia (no mezclar)
 
 1. `SIGMA4_REFERENCE_PASS`: prueba histórica del contrato en el intérprete Spectrum 4.0.5.
