@@ -1,0 +1,33 @@
+{
+  "schema": "SYPC_NATIVE6_FINGERPRINT_PIN_V1",
+  "sigma_state": "6.0.7",
+  "scala_version": "2.12.20",
+  "network_prefix_hex": "30",
+  "scope": "SYNTHETIC_COMPILE_ONLY_NOT_SYPC_CONSENSUS",
+  "contracts": {
+    "AtomicBuy.sc": {
+      "sha256": "9566b770f5d4002904058a8d72d97f7ecf1af52afb16d9d2157408af20787e5f",
+      "bytes": 193
+    },
+    "AtomicSell.sc": {
+      "sha256": "fe1de0f5b3eb59f0f21aebd8e52d916eff25513a968bc10f5cd0839e2e58634b",
+      "bytes": 110
+    },
+    "AtomicBuyRefundGuard.sc": {
+      "sha256": "f389d6e4bd9ca3962058557eb6c4eff7e452f4079ddcdd088ac7a5b4d91968ff",
+      "bytes": 359
+    },
+    "AtomicSellRefundGuard.sc": {
+      "sha256": "0f8b40030ff0d473a440022cc2f82dcf0ad0e91f911a6b7f7a894d5ba0e0f09d",
+      "bytes": 276
+    },
+    "AtomicBuySponsorRefund.sc": {
+      "sha256": "710d9dace0612ca11058f0d6bb6a7268c792220862b21bc4b01fb21116727746",
+      "bytes": 488
+    },
+    "AtomicSellSponsorRefund.sc": {
+      "sha256": "b0200387c8c3818b4228bf4dbd7db2ba352961dc6ec73165632d3cd0116e69fe",
+      "bytes": 509
+    }
+  }
+}
