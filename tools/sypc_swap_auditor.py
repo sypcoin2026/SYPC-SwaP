@@ -24,8 +24,6 @@ REFERENCE_SIGMA_VERSION = "4.0.5"
 MAX_JSON_BYTES = 262_144
 MAX_ARTIFACT_BYTES = 1_048_576
 MAX_REPORT_AGE_SECONDS = 900
-SHA40 = re.compile(r"[0-9a-f]{40}\Z")
-SHA64 = re.compile(r"[0-9a-f]{64}\Z")
 RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{7,63}\Z")
 FILENAME = re.compile(r"[a-z0-9][a-z0-9_.-]{0,63}\.(?:txt|log|json)\Z")
 
@@ -45,7 +43,6 @@ PHASES = {
         "independent_state_consistency", "reorg_and_restart",
     )),
 }
-NATIVE_CHECKS = PHASES["native"] | PHASES["two_node"]
 
 
 class AuditError(ValueError):
@@ -218,10 +215,6 @@ def inspect(policy: dict, report: dict, evidence_dir: Path,
         raise AuditError("Unexpected historical reference Sigma version")
     if phase == "offline" and reference != REFERENCE_SIGMA_VERSION:
         raise AuditBlocked("Offline research Sigma provenance not declared")
-    if phase in ("native", "two_node") and reference is not None:
-        # Reference metadata may accompany native evidence, but never count
-        # its tests as native proof. Required native check IDs below differ.
-        pass
     now = datetime.now(timezone.utc) if now is None else now
     if now.tzinfo is None:
         raise AuditError("Current clock has no timezone")
@@ -267,6 +260,16 @@ def inspect(policy: dict, report: dict, evidence_dir: Path,
         except UnicodeError as exc:
             raise AuditError(f"Invalid artifact encoding for {check}") from exc
         lines = set(content.splitlines())
+        if phase in ("native", "two_node") and row["status"] == "PASS":
+            # Reporter must declare the exact native engine, not historical
+            # Sigma 4.0.5. These are UNAUTHENTICATED assertions in v0.1.
+            required_markers = {
+                f"SYPC_AUDIT_NATIVE_SIGMA:{NATIVE_SIGMA_VERSION}",
+                f"SYPC_AUDIT_CORE_COMMIT:{p['core_commit']}",
+                f"SYPC_AUDIT_SWAP_COMMIT:{p['swap_commit']}",
+            }
+            if not required_markers.issubset(lines):
+                raise AuditError(f"Missing native engine/commit markers for {check}")
         if f"SYPC_AUDIT_CHECK_FAIL:{check}" in lines:
             failed.append(check)
         elif row["status"] == "PASS":
