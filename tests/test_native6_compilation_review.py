@@ -37,6 +37,12 @@ def interpreter_log():
            for scenario in sorted(checker.SELL_REJECTIONS)]
         + [
             "[info] " + checker.INTERPRETER_END,
+            "[info] SIGMA607_BUY_PASS:valid",
+        ]
+        + ["[info] SIGMA607_BUY_REJECT:" + scenario
+           for scenario in sorted(checker.BUY_REJECTIONS)]
+        + [
+            "[info] " + checker.BUY_INTERPRETER_END,
             "[info] " + checker.INTERPRETER_SCOPE,
         ]
     ) + "\n"
@@ -49,9 +55,11 @@ class Native6ReviewTests(unittest.TestCase):
 
     def test_interpreter_evidence_has_one_pass_and_ten_distinct_rejections(self):
         result = checker.inspect_interpreter_log(interpreter_log())
-        self.assertEqual(result["status"], "PASS_SIGMA607_SELL_INTERPRETER_TRACE_ONLY")
-        self.assertEqual(result["positive"], 1)
-        self.assertEqual(len(result["negative_scenarios"]), 10)
+        self.assertEqual(result["status"], "PASS_SIGMA607_BUY_SELL_INTERPRETER_TRACE_ONLY")
+        self.assertEqual(result["sell_positive"], 1)
+        self.assertEqual(result["buy_positive"], 1)
+        self.assertEqual(len(result["sell_negative_scenarios"]), 10)
+        self.assertEqual(len(result["buy_negative_scenarios"]), 7)
         self.assertFalse(result["native_consensus_proven"])
 
     def test_interpreter_missing_or_repeated_negative_is_rejected(self):
@@ -76,8 +84,35 @@ class Native6ReviewTests(unittest.TestCase):
             checker.inspect_interpreter_log(
                 interpreter_log() + "SIGMA607_INTERPRETER_REJECT:not-a-test\n")
 
+    def test_buy_missing_or_duplicate_rejection_fails(self):
+        name = sorted(checker.BUY_REJECTIONS)[0]
+        marker = "[info] SIGMA607_BUY_REJECT:" + name
+        with self.assertRaisesRegex(checker.FingerprintError, "Incomplete"):
+            checker.inspect_interpreter_log(
+                interpreter_log().replace(marker + "\n", "", 1))
+        with self.assertRaisesRegex(checker.FingerprintError, "duplicate"):
+            checker.inspect_interpreter_log(interpreter_log() + marker + "\n")
+
+    def test_buy_wrong_or_duplicate_positive_fails(self):
+        with self.assertRaisesRegex(checker.FingerprintError, "positive"):
+            checker.inspect_interpreter_log(
+                interpreter_log().replace(
+                    "SIGMA607_BUY_PASS:valid", "SIGMA607_BUY_PASS:forged"))
+        with self.assertRaisesRegex(checker.FingerprintError, "positive"):
+            checker.inspect_interpreter_log(
+                interpreter_log() + "SIGMA607_BUY_PASS:valid\n")
+
+    def test_buy_unknown_rejection_and_explicit_failure_fails(self):
+        with self.assertRaisesRegex(checker.FingerprintError, "negative"):
+            checker.inspect_interpreter_log(
+                interpreter_log() + "SIGMA607_BUY_REJECT:fake\n")
+        with self.assertRaisesRegex(checker.FingerprintError, "failure"):
+            checker.inspect_interpreter_log(
+                interpreter_log() + "SYPC607_MALICIOUS_BUY_ACCEPTED:no-order-id\n")
+
     def test_interpreter_missing_scope_or_finish_marker_is_blocked(self):
-        for marker in (checker.INTERPRETER_END, checker.INTERPRETER_SCOPE):
+        for marker in (checker.INTERPRETER_END, checker.BUY_INTERPRETER_END,
+                       checker.INTERPRETER_SCOPE):
             with self.subTest(marker=marker):
                 with self.assertRaisesRegex(checker.FingerprintError, "Incomplete"):
                     checker.inspect_interpreter_log(interpreter_log().replace(marker, ""))
