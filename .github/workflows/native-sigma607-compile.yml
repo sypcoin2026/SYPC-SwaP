@@ -1,0 +1,54 @@
+name: Native Sigma 6.0.7 compile-only compatibility (NOT SYPC consensus)
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sypc-sigma607-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native6-compiler:
+    name: Exact sigma-state 6.0.7 / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    steps:
+      - name: Checkout review candidate (no saved credentials)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install exact Java 11
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '11'
+      - name: Pinned sbt launcher
+        uses: sbt/setup-sbt@6c68d2fe8dfbc0a0534d70101baa2e0420e1a506 # v1.1.9
+        with:
+          sbt-runner-version: '1.11.1'
+      - name: Compile SIX source contracts against sigma-state 6.0.7
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd research/native6
+          sbt -batch 'runMain org.sypcoin.swap.NativeSigma607Compile ../ergo_script' \
+            2>&1 | tee "$RUNNER_TEMP/native6-compiler.log"
+          test "$(grep -c 'SYPC_NATIVE6_COMPILE_PASS Atomic' "$RUNNER_TEMP/native6-compiler.log")" -eq 6
+          grep -q 'SYPC_NATIVE6_COMPILER_ONLY_SIX_CONTRACTS_PASS' "$RUNNER_TEMP/native6-compiler.log"
+          grep -q 'NOT_SYPC_CONSENSUS_NOT_FULL_TRANSACTION_NOT_SIGNATURE_VERIFICATION' "$RUNNER_TEMP/native6-compiler.log"
+          # Independent offline reviewer pins ALL six compile-output hashes
+          # and byte lengths; a "success" message alone is not evidence.
+          python3 ../../tools/review_native6_compilation.py \
+            --manifest fingerprints.json \
+            --log "$RUNNER_TEMP/native6-compiler.log" \
+            | tee "$RUNNER_TEMP/native6-review.json"
+          grep -q '"status": "PASS_PINNED_SIGMA607_COMPILER_ONLY"' "$RUNNER_TEMP/native6-review.json"
+          echo "NATIVE_SIGMA607_COMPILER_GATE_PASS; NO_NATIVE_SYPC_TX_EXECUTION"
