@@ -75,3 +75,26 @@ jobs:
             | tee "$RUNNER_TEMP/sigma607-independent-review.json"
           grep -q '"status": "PASS_PINNED_SIGMA607_COMPILER_AND_SCRIPT_TRACE_ONLY"' "$RUNNER_TEMP/sigma607-independent-review.json"
           echo "SIGMA607_SYNTHETIC_SELL_AND_INDEPENDENT_AUDITOR_PASS; NOT_SYPC_NATIVE_CORE"
+      - name: Verify synthetic SIGNED transaction with both Sigma input scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd research/native6
+          sbt -batch 'runMain org.sypcoin.swap.NativeSigma607SignedTx ../ergo_script/AtomicSellSponsorRefund.sc' \
+            2>&1 | tee "$RUNNER_TEMP/sigma607-signed-tx.log"
+          grep -q 'SIGMA607_SIGNED_PASS:both_inputs' "$RUNNER_TEMP/sigma607-signed-tx.log"
+          grep -q 'SIGMA607_SIGNED_SERIALIZATION_PASS' "$RUNNER_TEMP/sigma607-signed-tx.log"
+          grep -q 'SIGMA607_SIGNED_CONSERVATION_PASS' "$RUNNER_TEMP/sigma607-signed-tx.log"
+          test "$(grep -c 'SIGMA607_SIGNED_REJECT:' "$RUNNER_TEMP/sigma607-signed-tx.log")" -eq 6
+          grep -q 'SIGMA607_SIGNED_SYNTHETIC_7_CASES_PASS' "$RUNNER_TEMP/sigma607-signed-tx.log"
+          grep -q 'NOT_SYPC_CORE_CONSENSUS_NOT_MEMPOOL_NOT_MINBOX_NOT_LIVENESS' "$RUNNER_TEMP/sigma607-signed-tx.log"
+          # Independent trace auditor: six exact distinct negative identifiers,
+          # preservation of all earlier Sigma 6 checks, and no funds permission.
+          python3 ../../tools/review_native6_compilation.py \
+            --manifest fingerprints.json \
+            --log "$RUNNER_TEMP/native6-compiler.log" \
+            --interpreter-log "$RUNNER_TEMP/sigma607-interpreter.log" \
+            --signed-log "$RUNNER_TEMP/sigma607-signed-tx.log" \
+            | tee "$RUNNER_TEMP/sigma607-signed-review.json"
+          grep -q '"status": "PASS_SIGMA607_COMPILER_SCRIPT_SIGNED_TRACES_ONLY"' "$RUNNER_TEMP/sigma607-signed-review.json"
+          echo "SIGMA607_SIGNED_AND_INDEPENDENT_AUDITOR_PASS; NOT_SYPC_CONSENSUS"
