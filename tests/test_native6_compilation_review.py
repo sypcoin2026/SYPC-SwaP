@@ -48,10 +48,77 @@ def interpreter_log():
     ) + "\n"
 
 
+def signed_log_lines():
+    return "\n".join(
+        ["[info] " + checker.SIGNED_POSITIVE,
+         "[info] " + checker.SIGNED_SERIALIZATION,
+         "[info] " + checker.SIGNED_CONSERVATION]
+        + ["[info] SIGMA607_SIGNED_REJECT:" + name
+           for name in sorted(checker.SIGNED_REJECTIONS)]
+        + ["[info] " + checker.SIGNED_END, "[info] " + checker.SIGNED_SCOPE]
+    ) + "\n"
+
+
 class Native6ReviewTests(unittest.TestCase):
     def setUp(self):
         self.manifest = checker.read_manifest(PINS)
         self.good = log_lines(self.manifest)
+
+    def test_signed_trace_requires_evidence_from_both_inputs(self):
+        result = checker.inspect_signed_transaction_log(signed_log_lines())
+        self.assertEqual(result["status"], "PASS_SIGMA607_SYNTHETIC_SIGNED_TRACE_ONLY")
+        self.assertEqual(result["positive_both_input_checks"], 1)
+        self.assertEqual(len(result["negative_scenarios"]), 6)
+        self.assertFalse(result["native_consensus_proven"])
+        self.assertFalse(result["safe_cancellation_proven"])
+
+    def test_signed_trace_missing_or_repeated_cases_fails(self):
+        case = sorted(checker.SIGNED_REJECTIONS)[0]
+        row = "[info] SIGMA607_SIGNED_REJECT:" + case + "\n"
+        with self.assertRaisesRegex(checker.FingerprintError, "Incomplete"):
+            checker.inspect_signed_transaction_log(
+                signed_log_lines().replace(row, "", 1))
+        with self.assertRaisesRegex(checker.FingerprintError, "duplicate"):
+            checker.inspect_signed_transaction_log(signed_log_lines() + row)
+
+    def test_signed_trace_fake_or_repeated_success_fails(self):
+        with self.assertRaisesRegex(checker.FingerprintError, "Incomplete"):
+            checker.inspect_signed_transaction_log(
+                signed_log_lines().replace(checker.SIGNED_SERIALIZATION, "NOT_RUN"))
+        with self.assertRaisesRegex(checker.FingerprintError, "Duplicate"):
+            checker.inspect_signed_transaction_log(
+                signed_log_lines() + checker.SIGNED_POSITIVE + "\n")
+
+    def test_signed_trace_unrecognized_negative_fails(self):
+        with self.assertRaisesRegex(checker.FingerprintError, "negative"):
+            checker.inspect_signed_transaction_log(
+                signed_log_lines() + "SIGMA607_SIGNED_REJECT:made-up\n")
+
+    def test_signed_trace_explicit_runtime_failure_fails(self):
+        with self.assertRaisesRegex(checker.FingerprintError, "failure"):
+            checker.inspect_signed_transaction_log(
+                signed_log_lines() + "[error] rejected\n")
+        with self.assertRaisesRegex(checker.FingerprintError, "failure"):
+            checker.inspect_signed_transaction_log(
+                signed_log_lines() + "SYPC607_SIGNED_UNSAFE_TRANSACTION_ACCEPTED:attack\n")
+
+    def test_all_three_independent_logs_are_needed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            comp = base / "compile.log"
+            smoke = base / "smoke.log"
+            signed = base / "signed.log"
+            comp.write_text(self.good)
+            smoke.write_text(interpreter_log())
+            signed.write_text(signed_log_lines())
+            result = checker.review(PINS, comp, smoke, signed)
+            self.assertEqual(result["status"],
+                             "PASS_SIGMA607_COMPILER_SCRIPT_SIGNED_TRACES_ONLY")
+            self.assertFalse(result["ready_for_funds"])
+            signed.write_text("wrong")
+            self.assertEqual(checker.review(PINS, comp, smoke, signed)["status"], "FAIL")
+            self.assertEqual(checker.review(PINS, comp, signed_log=signed)["status"],
+                             "FAIL")
 
     def test_interpreter_evidence_has_one_pass_and_ten_distinct_rejections(self):
         result = checker.inspect_interpreter_log(interpreter_log())
