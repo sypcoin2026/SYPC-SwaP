@@ -234,8 +234,9 @@ class AuditorTests(unittest.TestCase):
                 self.r["checks"][0]["artifact"] = name
                 with self.assertRaisesRegex(auditor.AuditError, "filename"):
                     self.inspect()
-        self.r["checks"][0]["artifact"] = self.r["checks"][1]["artifact"]
-        with self.assertRaisesRegex(auditor.AuditError, "filename"):
+        self.r["checks"][0]["artifact"] = "python_regressions.log"
+        self.r["checks"][1]["artifact"] = "python_regressions.log"
+        with self.assertRaisesRegex(auditor.AuditError, "duplicate evidence filename"):
             self.inspect()
 
     @unittest.skipUnless(hasattr(os, "O_NOFOLLOW"), "requires O_NOFOLLOW")
