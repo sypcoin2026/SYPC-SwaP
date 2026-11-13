@@ -88,4 +88,13 @@ jobs:
           test "$(grep -c 'SIGMA607_SIGNED_REJECT:' "$RUNNER_TEMP/sigma607-signed-tx.log")" -eq 6
           grep -q 'SIGMA607_SIGNED_SYNTHETIC_7_CASES_PASS' "$RUNNER_TEMP/sigma607-signed-tx.log"
           grep -q 'NOT_SYPC_CORE_CONSENSUS_NOT_MEMPOOL_NOT_MINBOX_NOT_LIVENESS' "$RUNNER_TEMP/sigma607-signed-tx.log"
-          echo "SIGMA607_SIGNED_SYNTHETIC_GATE_PASS; NOT_SYPC_CONSENSUS"
+          # Independent trace auditor: six exact distinct negative identifiers,
+          # preservation of all earlier Sigma 6 checks, and no funds permission.
+          python3 ../../tools/review_native6_compilation.py \
+            --manifest fingerprints.json \
+            --log "$RUNNER_TEMP/native6-compiler.log" \
+            --interpreter-log "$RUNNER_TEMP/sigma607-interpreter.log" \
+            --signed-log "$RUNNER_TEMP/sigma607-signed-tx.log" \
+            | tee "$RUNNER_TEMP/sigma607-signed-review.json"
+          grep -q '"status": "PASS_SIGMA607_COMPILER_SCRIPT_SIGNED_TRACES_ONLY"' "$RUNNER_TEMP/sigma607-signed-review.json"
+          echo "SIGMA607_SIGNED_AND_INDEPENDENT_AUDITOR_PASS; NOT_SYPC_CONSENSUS"
