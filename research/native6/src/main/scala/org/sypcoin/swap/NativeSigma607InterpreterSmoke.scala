@@ -6,12 +6,14 @@ import java.nio.file.{Files, Paths}
 import org.ergoplatform._
 import org.ergoplatform.validation.ValidationRules
 import sigmastate.crypto.DLogProtocol.DLogProverInput
-import sigmastate.eval.{CErgoTreeEvaluator, CPreHeader}
+import sigmastate.eval.CPreHeader
+import sigmastate.interpreter.{CErgoTreeEvaluator, Interpreter}
 import sigma.{Coll, Colls, Header, VersionContext}
 import sigma.ast.{ByteArrayConstant, ErgoTree, SigmaPropConstant}
 import sigma.crypto.CryptoConstants
 import sigma.data.{AvlTreeData, Digest32Coll}
 import sigma.interpreter.ContextExtension
+import sigma.serialization.{GroupElementSerializer, SigmaSerializer}
 
 /** Executes a *synthetic* SELL fill in the real Sigma 6.0.7 interpreter.
   *
@@ -94,7 +96,9 @@ object NativeSigma607InterpreterSmoke {
       AvlTreeData.dummy,
       Colls.emptyColl[Header],
       CPreHeader(0, Colls.emptyColl[Byte], 3L, 0L, 100,
-        CryptoConstants.dlogGroup.generator, Colls.emptyColl[Byte]),
+        GroupElementSerializer.parse(SigmaSerializer.startReader(
+          GroupElementSerializer.toBytes(CryptoConstants.dlogGroup.generator)
+        )).toGroupElement, Colls.emptyColl[Byte]),
       IndexedSeq.empty[ErgoBox],
       IndexedSeq(self, payer),
       unsigned,
@@ -106,7 +110,8 @@ object NativeSigma607InterpreterSmoke {
       VersionContext.MaxSupportedScriptVersion
     )
 
-    verifier.verify(tree, context, Array.empty[Byte], signedMessage).get._1
+    verifier.verify(Interpreter.emptyEnv, tree, context,
+      Array.empty[Byte], signedMessage).get._1
   }
 
   def main(args: Array[String]): Unit = {
