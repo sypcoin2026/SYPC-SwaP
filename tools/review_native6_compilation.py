@@ -230,8 +230,63 @@ def inspect_interpreter_log(raw: str) -> dict:
     }
 
 
-def review(manifest_path: Path, log_path: Path, interpreter_log: Path | None = None) -> dict:
+
+SIGNED_REJECTIONS = frozenset((
+    "missing-buyer-proof", "wrong-buyer-proof", "changed-seller-payout",
+    "wrong-order-register", "modified-token-recipient", "duplicate-order-input",
+))
+SIGNED_POSITIVE = "SIGMA607_SIGNED_PASS:both_inputs"
+SIGNED_SERIALIZATION = "SIGMA607_SIGNED_SERIALIZATION_PASS"
+SIGNED_CONSERVATION = "SIGMA607_SIGNED_CONSERVATION_PASS"
+SIGNED_END = "SIGMA607_SIGNED_SYNTHETIC_7_CASES_PASS"
+SIGNED_SCOPE = "NOT_SYPC_CORE_CONSENSUS_NOT_MEMPOOL_NOT_MINBOX_NOT_LIVENESS"
+
+
+def inspect_signed_transaction_log(raw: str) -> dict:
+    """Reject incomplete/duplicated labels in the synthetic two-input proof trace.
+
+    Labels are NOT cryptographic proof attestations. Only Sigma6 runtime
+    verifies the actual proof. A faked log still needs independent detection.
+    """
+    if type(raw) is not str or len(raw) > MAX_LOG:
+        raise FingerprintError("Signed trace invalid or oversized")
+    expected_markers = {
+        SIGNED_POSITIVE, SIGNED_SERIALIZATION, SIGNED_CONSERVATION,
+        SIGNED_END, SIGNED_SCOPE,
+    }
+    seen = set()
+    rejected = set()
+    for raw_line in raw.splitlines():
+        line = ANSI.sub("", raw_line)
+        for marker in expected_markers:
+            if marker in line and not line.lstrip().startswith("echo "):
+                if marker in seen:
+                    raise FingerprintError("Duplicate signed transaction PASS marker")
+                seen.add(marker)
+        if "SIGMA607_SIGNED_REJECT:" in line:
+            name = line.split("SIGMA607_SIGNED_REJECT:", 1)[1]
+            if name not in SIGNED_REJECTIONS or name in rejected:
+                raise FingerprintError("Unknown or duplicate signed transaction negative")
+            rejected.add(name)
+        if "[error]" in line or "SYPC607_SIGNED_UNSAFE_TRANSACTION_ACCEPTED" in line:
+            raise FingerprintError("Signed transaction verifier reported explicit failure")
+    if seen != expected_markers or rejected != SIGNED_REJECTIONS:
+        raise FingerprintError("Incomplete signed transaction evidence")
+    return {
+        "status": "PASS_SIGMA607_SYNTHETIC_SIGNED_TRACE_ONLY",
+        "positive_both_input_checks": 1,
+        "negative_scenarios": sorted(rejected),
+        "native_consensus_proven": False,
+        "real_utxo_proven": False,
+        "safe_cancellation_proven": False,
+    }
+
+
+def review(manifest_path: Path, log_path: Path, interpreter_log: Path | None = None,
+           signed_log: Path | None = None) -> dict:
     try:
+        if signed_log is not None and interpreter_log is None:
+            raise FingerprintError("Signed trace requires the interpreter trace")
         manifest = read_manifest(manifest_path)
         body = _read_local(log_path, MAX_LOG).decode("utf-8")
         result = inspect(manifest, body)
@@ -239,6 +294,10 @@ def review(manifest_path: Path, log_path: Path, interpreter_log: Path | None = N
             trace = _read_local(interpreter_log, MAX_LOG).decode("utf-8")
             result["interpreter"] = inspect_interpreter_log(trace)
             result["status"] = "PASS_PINNED_SIGMA607_COMPILER_AND_SCRIPT_TRACE_ONLY"
+        if signed_log is not None:
+            trace = _read_local(signed_log, MAX_LOG).decode("utf-8")
+            result["signed"] = inspect_signed_transaction_log(trace)
+            result["status"] = "PASS_SIGMA607_COMPILER_SCRIPT_SIGNED_TRACES_ONLY"
         return result
     except (UnicodeError, FingerprintError, OSError, ValueError) as exc:
         return {"status": "FAIL", "reason": str(exc),
@@ -250,12 +309,14 @@ def main(argv=None):
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--interpreter-log", type=Path, default=None)
+    parser.add_argument("--signed-log", type=Path, default=None)
     args = parser.parse_args(argv)
-    result = review(args.manifest, args.log, args.interpreter_log)
+    result = review(args.manifest, args.log, args.interpreter_log, args.signed_log)
     print(json.dumps(result, sort_keys=True))
     return 0 if result["status"] in (
         "PASS_PINNED_SIGMA607_COMPILER_ONLY",
         "PASS_PINNED_SIGMA607_COMPILER_AND_SCRIPT_TRACE_ONLY",
+        "PASS_SIGMA607_COMPILER_SCRIPT_SIGNED_TRACES_ONLY",
     ) else 2
 
 
