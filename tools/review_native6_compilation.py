@@ -162,42 +162,69 @@ SELL_REJECTIONS = frozenset((
     "extra-token", "underpay", "wrong-owner", "wrong-order-id",
     "no-order-id", "seller-gets-token",
 ))
+BUY_REJECTIONS = frozenset((
+    "wrong-token", "too-few", "no-tokens", "wrong-owner",
+    "wrong-order-id", "no-order-id", "wrong-output-order",
+))
 INTERPRETER_END = "SIGMA607_INTERPRETER_SELL_SYNTHETIC_11_CASES_PASS"
+BUY_INTERPRETER_END = "SIGMA607_BUY_SYNTHETIC_8_CASES_PASS"
 INTERPRETER_SCOPE = "NOT_SYPC_NODE_CONSENSUS_NOT_A_FULL_SIGNED_TRANSACTION"
+
+SCENARIOS = {
+    "sell": {
+        "positive": "SIGMA607_INTERPRETER_PASS:",
+        "negative": "SIGMA607_INTERPRETER_REJECT:",
+        "end": INTERPRETER_END,
+        "required": SELL_REJECTIONS,
+    },
+    "buy": {
+        "positive": "SIGMA607_BUY_PASS:",
+        "negative": "SIGMA607_BUY_REJECT:",
+        "end": BUY_INTERPRETER_END,
+        "required": BUY_REJECTIONS,
+    },
+}
 
 
 def inspect_interpreter_log(raw: str) -> dict:
-    """Independently require one true case, all ten DISTINCT negative cases."""
+    """Independently check BOTH BUY and SELL evidence with unique scenario IDs."""
     if type(raw) is not str or len(raw) > MAX_LOG:
         raise FingerprintError("Interpreter trace invalid or oversized")
-    positives = 0
-    negatives = set()
-    end = 0
+    positives = {side: 0 for side in SCENARIOS}
+    negatives = {side: set() for side in SCENARIOS}
+    completed = {side: 0 for side in SCENARIOS}
     scoped = 0
     for row in raw.splitlines():
         text = ANSI.sub("", row)
-        if "SIGMA607_INTERPRETER_PASS:" in text:
-            result = text.split("SIGMA607_INTERPRETER_PASS:", 1)[1]
-            if result != "valid" or positives:
-                raise FingerprintError("Unexpected or duplicate positive interpreter case")
-            positives += 1
-        if "SIGMA607_INTERPRETER_REJECT:" in text:
-            scenario = text.split("SIGMA607_INTERPRETER_REJECT:", 1)[1]
-            if scenario not in SELL_REJECTIONS or scenario in negatives:
-                raise FingerprintError("Unknown or duplicate negative interpreter case")
-            negatives.add(scenario)
-        if INTERPRETER_END in text and not text.lstrip().startswith("echo "):
-            end += 1
+        for side, spec in SCENARIOS.items():
+            if spec["positive"] in text:
+                result = text.split(spec["positive"], 1)[1]
+                if result != "valid" or positives[side]:
+                    raise FingerprintError("Unexpected or duplicate positive interpreter case")
+                positives[side] += 1
+            if spec["negative"] in text:
+                scenario = text.split(spec["negative"], 1)[1]
+                if scenario not in spec["required"] or scenario in negatives[side]:
+                    raise FingerprintError("Unknown or duplicate negative interpreter case")
+                negatives[side].add(scenario)
+            if spec["end"] in text and not text.lstrip().startswith("echo "):
+                completed[side] += 1
         if INTERPRETER_SCOPE in text and not text.lstrip().startswith("echo "):
             scoped += 1
-        if "[error]" in text or "SYPC607_MALICIOUS_SELL_ACCEPTED" in text:
+        if ("[error]" in text or "SYPC607_MALICIOUS_SELL_ACCEPTED" in text
+                or "SYPC607_MALICIOUS_BUY_ACCEPTED" in text):
             raise FingerprintError("Interpreter trace contains failure")
-    if positives != 1 or negatives != SELL_REJECTIONS or end != 1 or scoped != 1:
-        raise FingerprintError("Incomplete synthetic Sigma6 interpreter evidence")
+    for side, spec in SCENARIOS.items():
+        if positives[side] != 1 or negatives[side] != spec["required"] or completed[side] != 1:
+            raise FingerprintError("Incomplete synthetic Sigma6 interpreter evidence")
+    if scoped != 1:
+        raise FingerprintError("Incomplete or duplicated interpreter scope marker")
     return {
-        "status": "PASS_SIGMA607_SELL_INTERPRETER_TRACE_ONLY",
-        "positive": positives,
-        "negative_scenarios": sorted(negatives),
+        "status": "PASS_SIGMA607_BUY_SELL_INTERPRETER_TRACE_ONLY",
+        "sell_positive": positives["sell"],
+        "buy_positive": positives["buy"],
+        "sell_negative_scenarios": sorted(negatives["sell"]),
+        "buy_negative_scenarios": sorted(negatives["buy"]),
         "native_consensus_proven": False,
         "complete_signed_transaction_proven": False,
     }

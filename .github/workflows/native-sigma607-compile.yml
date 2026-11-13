@@ -57,11 +57,14 @@ jobs:
         run: |
           set -euo pipefail
           cd research/native6
-          sbt -batch 'runMain org.sypcoin.swap.NativeSigma607InterpreterSmoke ../ergo_script/AtomicSellSponsorRefund.sc' \
+          sbt -batch 'runMain org.sypcoin.swap.NativeSigma607InterpreterSmoke ../ergo_script/AtomicSellSponsorRefund.sc ../ergo_script/AtomicBuySponsorRefund.sc' \
             2>&1 | tee "$RUNNER_TEMP/sigma607-interpreter.log"
           test "$(grep -c 'SIGMA607_INTERPRETER_REJECT:' "$RUNNER_TEMP/sigma607-interpreter.log")" -eq 10
           grep -q 'SIGMA607_INTERPRETER_PASS:valid' "$RUNNER_TEMP/sigma607-interpreter.log"
           grep -q 'SIGMA607_INTERPRETER_SELL_SYNTHETIC_11_CASES_PASS' "$RUNNER_TEMP/sigma607-interpreter.log"
+          test "$(grep -c 'SIGMA607_BUY_REJECT:' "$RUNNER_TEMP/sigma607-interpreter.log")" -eq 7
+          grep -q 'SIGMA607_BUY_PASS:valid' "$RUNNER_TEMP/sigma607-interpreter.log"
+          grep -q 'SIGMA607_BUY_SYNTHETIC_8_CASES_PASS' "$RUNNER_TEMP/sigma607-interpreter.log"
           grep -q 'NOT_SYPC_NODE_CONSENSUS_NOT_A_FULL_SIGNED_TRANSACTION' "$RUNNER_TEMP/sigma607-interpreter.log"
           # Separately verify every named scenario and the six pinned hashes.
           # Mere count/exit-code success is not enough for this security gate.
