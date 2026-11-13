@@ -44,4 +44,11 @@ jobs:
           test "$(grep -c 'SYPC_NATIVE6_COMPILE_PASS Atomic' "$RUNNER_TEMP/native6-compiler.log")" -eq 6
           grep -q 'SYPC_NATIVE6_COMPILER_ONLY_SIX_CONTRACTS_PASS' "$RUNNER_TEMP/native6-compiler.log"
           grep -q 'NOT_SYPC_CONSENSUS_NOT_FULL_TRANSACTION_NOT_SIGNATURE_VERIFICATION' "$RUNNER_TEMP/native6-compiler.log"
+          # Independent offline reviewer pins ALL six compile-output hashes
+          # and byte lengths; a "success" message alone is not evidence.
+          python3 ../../tools/review_native6_compilation.py \
+            --manifest fingerprints.json \
+            --log "$RUNNER_TEMP/native6-compiler.log" \
+            | tee "$RUNNER_TEMP/native6-review.json"
+          grep -q '"status": "PASS_PINNED_SIGMA607_COMPILER_ONLY"' "$RUNNER_TEMP/native6-review.json"
           echo "NATIVE_SIGMA607_COMPILER_GATE_PASS; NO_NATIVE_SYPC_TX_EXECUTION"
