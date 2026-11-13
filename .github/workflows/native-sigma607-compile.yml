@@ -63,4 +63,12 @@ jobs:
           grep -q 'SIGMA607_INTERPRETER_PASS:valid' "$RUNNER_TEMP/sigma607-interpreter.log"
           grep -q 'SIGMA607_INTERPRETER_SELL_SYNTHETIC_11_CASES_PASS' "$RUNNER_TEMP/sigma607-interpreter.log"
           grep -q 'NOT_SYPC_NODE_CONSENSUS_NOT_A_FULL_SIGNED_TRANSACTION' "$RUNNER_TEMP/sigma607-interpreter.log"
-          echo "SIGMA607_SYNTHETIC_SELL_PASS; NOT_SYPC_NATIVE_CORE"
+          # Separately verify every named scenario and the six pinned hashes.
+          # Mere count/exit-code success is not enough for this security gate.
+          python3 ../../tools/review_native6_compilation.py \
+            --manifest fingerprints.json \
+            --log "$RUNNER_TEMP/native6-compiler.log" \
+            --interpreter-log "$RUNNER_TEMP/sigma607-interpreter.log" \
+            | tee "$RUNNER_TEMP/sigma607-independent-review.json"
+          grep -q '"status": "PASS_PINNED_SIGMA607_COMPILER_AND_SCRIPT_TRACE_ONLY"' "$RUNNER_TEMP/sigma607-independent-review.json"
+          echo "SIGMA607_SYNTHETIC_SELL_AND_INDEPENDENT_AUDITOR_PASS; NOT_SYPC_NATIVE_CORE"
