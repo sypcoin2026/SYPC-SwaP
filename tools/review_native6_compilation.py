@@ -157,11 +157,62 @@ def inspect(manifest: dict, log: str) -> dict:
     }
 
 
-def review(manifest_path: Path, log_path: Path) -> dict:
+SELL_REJECTIONS = frozenset((
+    "wrong-token", "too-few", "too-many", "no-tokens",
+    "extra-token", "underpay", "wrong-owner", "wrong-order-id",
+    "no-order-id", "seller-gets-token",
+))
+INTERPRETER_END = "SIGMA607_INTERPRETER_SELL_SYNTHETIC_11_CASES_PASS"
+INTERPRETER_SCOPE = "NOT_SYPC_NODE_CONSENSUS_NOT_A_FULL_SIGNED_TRANSACTION"
+
+
+def inspect_interpreter_log(raw: str) -> dict:
+    """Independently require one true case, all ten DISTINCT negative cases."""
+    if type(raw) is not str or len(raw) > MAX_LOG:
+        raise FingerprintError("Interpreter trace invalid or oversized")
+    positives = 0
+    negatives = set()
+    end = 0
+    scoped = 0
+    for row in raw.splitlines():
+        text = ANSI.sub("", row)
+        if "SIGMA607_INTERPRETER_PASS:" in text:
+            result = text.split("SIGMA607_INTERPRETER_PASS:", 1)[1]
+            if result != "valid" or positives:
+                raise FingerprintError("Unexpected or duplicate positive interpreter case")
+            positives += 1
+        if "SIGMA607_INTERPRETER_REJECT:" in text:
+            scenario = text.split("SIGMA607_INTERPRETER_REJECT:", 1)[1]
+            if scenario not in SELL_REJECTIONS or scenario in negatives:
+                raise FingerprintError("Unknown or duplicate negative interpreter case")
+            negatives.add(scenario)
+        if INTERPRETER_END in text and not text.lstrip().startswith("echo "):
+            end += 1
+        if INTERPRETER_SCOPE in text and not text.lstrip().startswith("echo "):
+            scoped += 1
+        if "[error]" in text or "SYPC607_MALICIOUS_SELL_ACCEPTED" in text:
+            raise FingerprintError("Interpreter trace contains failure")
+    if positives != 1 or negatives != SELL_REJECTIONS or end != 1 or scoped != 1:
+        raise FingerprintError("Incomplete synthetic Sigma6 interpreter evidence")
+    return {
+        "status": "PASS_SIGMA607_SELL_INTERPRETER_TRACE_ONLY",
+        "positive": positives,
+        "negative_scenarios": sorted(negatives),
+        "native_consensus_proven": False,
+        "complete_signed_transaction_proven": False,
+    }
+
+
+def review(manifest_path: Path, log_path: Path, interpreter_log: Path | None = None) -> dict:
     try:
         manifest = read_manifest(manifest_path)
         body = _read_local(log_path, MAX_LOG).decode("utf-8")
-        return inspect(manifest, body)
+        result = inspect(manifest, body)
+        if interpreter_log is not None:
+            trace = _read_local(interpreter_log, MAX_LOG).decode("utf-8")
+            result["interpreter"] = inspect_interpreter_log(trace)
+            result["status"] = "PASS_PINNED_SIGMA607_COMPILER_AND_SCRIPT_TRACE_ONLY"
+        return result
     except (UnicodeError, FingerprintError, OSError, ValueError) as exc:
         return {"status": "FAIL", "reason": str(exc),
                 "ready_for_deployment": False, "ready_for_funds": False}
@@ -171,10 +222,14 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--log", type=Path, required=True)
+    parser.add_argument("--interpreter-log", type=Path, default=None)
     args = parser.parse_args(argv)
-    result = review(args.manifest, args.log)
+    result = review(args.manifest, args.log, args.interpreter_log)
     print(json.dumps(result, sort_keys=True))
-    return 0 if result["status"] == "PASS_PINNED_SIGMA607_COMPILER_ONLY" else 2
+    return 0 if result["status"] in (
+        "PASS_PINNED_SIGMA607_COMPILER_ONLY",
+        "PASS_PINNED_SIGMA607_COMPILER_AND_SCRIPT_TRACE_ONLY",
+    ) else 2
 
 
 if __name__ == "__main__":
