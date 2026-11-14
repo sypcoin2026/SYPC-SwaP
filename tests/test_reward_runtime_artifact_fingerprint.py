@@ -116,7 +116,7 @@ class FingerprintReadOnlyTests(unittest.TestCase):
             ["--patch-module=java.base=PRIVATE_TEST"], ["-Djava.class.path=PRIVATE_TEST"],
             ["--module-path", "PRIVATE_TEST"],
             ["-Xbootclasspath/a:PRIVATE_TEST"], ["-XX:VMOptionsFile=PRIVATE_TEST"],
-            ["-cp", "second"], ["-Djava.home=PRIVATE_TEST"],
+            ["-cp", "second"], ["-Djava.home=PRIVATE_TEST"], ["-Duser.dir=PRIVATE_TEST"],
         ):
             with self.subTest(flags=flags), self.assertRaisesRegex(
                 audit.FingerprintError, "UNSUPPORTED_JAVA_LAUNCH_OPTIONS"
@@ -341,6 +341,30 @@ class FingerprintReadOnlyTests(unittest.TestCase):
                                   "--core-commit", "a" * 40, *verify[-2:])
         self.assertEqual(rc, 2)
         self.assertIn("DUPLICATE_CORE_CLASS", err)
+
+    def test_manifest_detects_jar_renamed_without_changing_bytes(self):
+        _, cp, cpfile, _ = self.manifest_fixture()
+        dependency = self.cwd / "dependency.jar"
+        with zipfile.ZipFile(dependency, "w") as archive:
+            archive.writestr("resource.txt", "fixture")
+        cp += os.pathsep + str(dependency)
+        cpfile.write_text(cp + "\n")
+        sigma_hash = audit.sha256_file(self.cwd / audit.SIGMA_JAR)
+        rc, generated, err = self.run_cli("--build-classpath-file", cpfile, "--build-java", self.java,
+                                          "--core-commit", "a" * 40,
+                                          "--expected-sigma-sha256", sigma_hash)
+        self.assertEqual((rc, err), (0, ""))
+        manifest = self.root / "manifest.json"
+        manifest.write_text(generated)
+        renamed = dependency.with_name("PRIVATE_TEST.jar")
+        dependency.rename(renamed)
+        (self.proc / "43/cmdline").write_bytes(b"\0".join(map(os.fsencode, [
+            "java", "-cp", cp.removesuffix(dependency.name) + renamed.name, audit.MAIN_CLASS, "",
+        ])))
+        rc, _, err = self.run_cli("--manifest", manifest, "--expected-manifest-sha256",
+                                  audit.sha256_file(manifest), "--expected-sigma-sha256", sigma_hash)
+        self.assertEqual(rc, 2)
+        self.assertIn("CLASSPATH_OR_JAVA_MANIFEST_MISMATCH", err)
 
     def test_full_check_rejects_top_level_symlink(self):
         classes = self.add_classes()

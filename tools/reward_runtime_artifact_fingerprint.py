@@ -72,7 +72,7 @@ MODULE_OPTIONS_WITH_VALUE = {
 LOADER_PROPERTIES = (
     "-Djava.system.class.loader", "-Djava.class.path", "-Djava.ext.dirs",
     "-Djava.endorsed.dirs", "-Djava.home", "-Djava.library.path",
-    "-Djdk.module.", "-Djdk.util.jar.", "-Dsun.boot.",
+    "-Duser.dir", "-Djdk.module.", "-Djdk.util.jar.", "-Dsun.boot.",
 )
 JAVA_ENV_OPTIONS = {
     b"JAVA_TOOL_OPTIONS", b"JDK_JAVA_OPTIONS", b"_JAVA_OPTIONS",
@@ -280,7 +280,7 @@ def jar_classes(archive: zipfile.ZipFile, jar_name: str, *, full: bool) -> tuple
         index = read_jar_member(archive, members[jar_index]).splitlines()
         jar = os.fsencode(jar_name)
         if (index[:3] != [b"JarIndex-Version: 1.0", b"", jar]
-                or any(line.endswith(b".jar") for line in index[3:])):
+                or any(b".jar" in line for line in index[3:])):
             raise FingerprintError("JAR_INDEX_CLASSPATH_UNSUPPORTED")
     classes = {
         CLASS_LABELS[name]: hashlib.sha256(read_jar_member(archive, member)).hexdigest()
@@ -335,6 +335,8 @@ def fingerprint_artifact(path: Path, *, full: bool = False) -> dict:
             if full or is_sigma or LAUNCHER_LABELS.intersection(classes):
                 stream.seek(0)
                 item["sha256"] = hash_stream(stream, length, "ARTIFACT_CHANGED_DURING_CAPTURE")
+            if full:
+                item["jar_name_sha256"] = hashlib.sha256(os.fsencode(path.name)).hexdigest()
     else:
         raise FingerprintError("CLASSPATH_ENTRY_UNSUPPORTED")
     if resolved != path.resolve(strict=True) or stamp(before) != stamp(path.stat()):
@@ -489,7 +491,8 @@ def make_manifest(entries: list[dict], runtime: dict, commit: str) -> dict:
         classes.update(record["core_classes"])
     return {
         "schema": MANIFEST_SCHEMA, "core_commit": commit, "java_runtime": runtime,
-        "entries": [{"type": item["type"], "sha256": item["sha256"]} for item in entries],
+        "entries": [{key: item[key] for key in ("type", "sha256", "jar_name_sha256") if key in item}
+                    for item in entries],
     }
 
 
@@ -526,6 +529,8 @@ def main() -> int:
             raise FingerprintError("INVALID_PID")
         if not HEX64.fullmatch(args.expected_sigma_sha256):
             raise FingerprintError("INVALID_EXPECTED_SIGMA_HASH")
+        if args.build_classpath_file and (args.pid is not None or args.manifest):
+            raise FingerprintError("INVALID_MANIFEST_BUILD_ARGUMENTS")
         expected_manifest = None
         if args.manifest or args.expected_manifest_sha256:
             if not args.manifest or not HEX64.fullmatch(args.expected_manifest_sha256 or ""):

@@ -25,7 +25,7 @@ python3 -B tools/reward_runtime_artifact_fingerprint.py \
 sha256sum "$REWARD_BUILD_MANIFEST"
 ```
 
-El manifiesto registra, en orden, el tipo y SHA-256 de cada JAR y de todo el árbol de cada directorio del classpath, incluidos los recursos. El hash de un directorio incorpora su estructura, los nombres relativos y el SHA-256 de cada archivo, en orden por bytes. También registra hashes del lanzador Java, `libjvm.so`, la imagen de módulos y el descriptor de Java 11. El modo estricto exige rutas canónicas, rechaza enlaces simbólicos dentro de los árboles y rechaza duplicados de las clases Core y Sigma, aunque los bytes coincidan.
+El manifiesto registra, en orden, el tipo y SHA-256 de cada JAR y de todo el árbol de cada directorio del classpath, incluidos los recursos. Registra también una huella del nombre base de cada JAR, que puede afectar al nombre del módulo o a la búsqueda de recursos. El hash de un directorio incorpora su estructura, los nombres relativos y el SHA-256 de cada archivo, en orden por bytes. También registra hashes del lanzador Java, `libjvm.so`, la imagen de módulos y el descriptor de Java 11. El modo estricto exige rutas canónicas, rechaza enlaces simbólicos dentro de los árboles y rechaza duplicados de las clases Core y Sigma, aunque los bytes coincidan.
 
 Publicar o entregar mediante un canal de confianza el hash del manifiesto junto con la evidencia de compilación correspondiente. Verificar la instalación contra ese hash, obtenido independientemente de la máquina o instalación que se examina.
 
