@@ -145,8 +145,9 @@ def inspect_process(pid: int, proc_root: Path = Path("/proc")) -> dict | None:
         cwd = Path(os.readlink(proc_pid / "cwd"))
     except OSError as exc:
         raise FingerprintError("PROCESS_CWD_UNREADABLE") from exc
+    entries = expand_classpath(cp, cwd)
     artifacts = []
-    for entry in expand_classpath(cp, cwd):
+    for entry in entries:
         item = fingerprint_artifact(entry)
         if item is not None:
             artifacts.append(item)
@@ -156,7 +157,7 @@ def inspect_process(pid: int, proc_root: Path = Path("/proc")) -> dict | None:
     sigmas = [a["sha256"] for a in artifacts if a.get("is_exact_sigma607_filename")]
     return {
         "pid": pid,
-        "classpath_entries": len(expand_classpath(cp, cwd)),
+        "classpath_entries": len(entries),
         "launcher_artifacts": launchers,
         "sigma607_sha256": sigmas,
     }
@@ -171,13 +172,19 @@ def select_process(*, pid: int | None = None, proc_root: Path = Path("/proc")) -
     matches = []
     for number in candidates:
         try:
-            record = inspect_process(number, proc_root)
+            argv = read_cmdline(proc_root / str(number))
         except FingerprintError:
             if pid is not None:
                 raise
-            continue  # Other users' processes can be unreadable; no secret output.
-        if record is not None:
-            matches.append(record)
+            continue  # Other users' unreadable processes: no argv is printed.
+        if MAIN_CLASS not in argv:
+            continue
+        # Once the target is identified, every error must FAIL CLOSED.
+        # Silently skipping it could hide a second, ambiguous Reward JVM.
+        record = inspect_process(number, proc_root)
+        if record is None:
+            raise FingerprintError("LAUNCHER_DISAPPEARED_DURING_CAPTURE")
+        matches.append(record)
     if len(matches) != 1:
         raise FingerprintError("EXPECTED_EXACTLY_ONE_REWARD_LAUNCHER")
     return matches[0]
