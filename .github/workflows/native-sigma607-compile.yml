@@ -111,4 +111,14 @@ jobs:
           test "$(grep -c 'SIGMA607_CANCEL_REJECT:' "$RUNNER_TEMP/sigma607-cancel.log")" -eq 8
           grep -q 'SIGMA607_CANCEL_SYNTHETIC_9_CASES_PASS' "$RUNNER_TEMP/sigma607-cancel.log"
           grep -q 'NOT_SYPC_CORE_CONSENSUS_NOT_REAL_LIVENESS_NOT_MINBOX_OR_FEES' "$RUNNER_TEMP/sigma607-cancel.log"
-          echo "SIGMA607_SPONSOR_TWO_PROOFS_LAB_PASS; NOT_SYPC_CONSENSUS"
+          # Four independent evidence layers are required: pinned compiler,
+          # BUY/SELL interpreter, signed SELL fill, and TWO-signature cancel.
+          python3 ../../tools/review_native6_compilation.py \
+            --manifest fingerprints.json \
+            --log "$RUNNER_TEMP/native6-compiler.log" \
+            --interpreter-log "$RUNNER_TEMP/sigma607-interpreter.log" \
+            --signed-log "$RUNNER_TEMP/sigma607-signed-tx.log" \
+            --cancel-log "$RUNNER_TEMP/sigma607-cancel.log" \
+            | tee "$RUNNER_TEMP/sigma607-cancel-review.json"
+          grep -q '"status": "PASS_SIGMA607_FOUR_LAB_TRACES_ONLY"' "$RUNNER_TEMP/sigma607-cancel-review.json"
+          echo "SIGMA607_SPONSOR_TWO_PROOFS_AND_INDEPENDENT_AUDITOR_PASS; NOT_SYPC_CONSENSUS"
