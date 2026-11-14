@@ -127,6 +127,58 @@ class FingerprintReadOnlyTests(unittest.TestCase):
         record = select_process(pid=4777, proc_root=self.proc)
         self.assertEqual(len(record["launcher_artifacts"]), 2)
 
+    def test_jar_and_directory_candidates_match_by_class_bytes(self):
+        classes = self.add_classes()
+        jar = self.cwd / "duplicated-launcher.jar"
+        class_bytes = (classes / CLASS_FILES["reward_launcher"]).read_bytes()
+        module_bytes = b"scala-module-public-sample"
+        module_file = classes / CLASS_FILES["reward_launcher_module"]
+        module_file.write_bytes(module_bytes)
+        with zipfile.ZipFile(jar, "w") as archive:
+            archive.writestr(CLASS_FILES["reward_launcher"], class_bytes)
+            archive.writestr(CLASS_FILES["reward_launcher_module"], module_bytes)
+        self.add_sigma()
+        self.add_proc(4888, [
+            "java", "-cp", "classes:duplicated-launcher.jar:lib/" + SIGMA_JAR,
+            MAIN_CLASS, "do_not_export=PRIVATE",
+        ])
+        record = select_process(pid=4888, proc_root=self.proc)
+        self.assertEqual(len(record["launcher_artifacts"]), 2)
+        a, b = record["launcher_artifacts"]
+        self.assertEqual([a["classpath_index"], b["classpath_index"]], [0, 1])
+        self.assertEqual(a["class_sha256"], b["class_sha256"])
+        self.assertEqual(set(a["class_sha256"]), {"reward_launcher", "reward_launcher_module"})
+        self.assertEqual(b["sha256"], sha256_file(jar))
+        self.assertNotIn(str(self.cwd), json.dumps(record))
+        self.assertNotIn("PRIVATE", json.dumps(record))
+
+    def test_different_jar_and_dir_class_bytes_detected(self):
+        classes = self.add_classes()
+        jar = self.cwd / "old-launcher.jar"
+        with zipfile.ZipFile(jar, "w") as archive:
+            archive.writestr(CLASS_FILES["reward_launcher"], b"OLD-UNTRUSTED-BYTES")
+        self.add_sigma()
+        self.add_proc(4999, [
+            "java", "-cp", "classes:old-launcher.jar:lib/" + SIGMA_JAR, MAIN_CLASS,
+        ])
+        record = select_process(pid=4999, proc_root=self.proc)
+        self.assertEqual(len(record["launcher_artifacts"]), 2)
+        self.assertNotEqual(
+            record["launcher_artifacts"][0]["class_sha256"],
+            record["launcher_artifacts"][1]["class_sha256"],
+        )
+
+    def test_reject_duplicated_zip_member_name(self):
+        import warnings
+        jar = self.cwd / "bad-launcher.jar"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            with zipfile.ZipFile(jar, "w") as archive:
+                archive.writestr(CLASS_FILES["reward_launcher"], b"version1")
+                archive.writestr(CLASS_FILES["reward_launcher"], b"version2")
+        with self.assertRaisesRegex(FingerprintError, "DUPLICATE_CLASS_IN_JAR"):
+            fingerprint_artifact(jar)
+
     def test_multiple_reward_launchers_are_ambiguous(self):
         self.add_classes()
         self.add_sigma()
