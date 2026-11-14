@@ -75,12 +75,12 @@ class Native6ReviewTests(unittest.TestCase):
         self.manifest = checker.read_manifest(PINS)
         self.good = log_lines(self.manifest)
 
-    def test_sponsor_cancel_requires_two_proof_claims_and_eight_rejections(self):
+    def test_sponsor_cancel_requires_two_proof_claims_and_ten_rejections(self):
         result = checker.inspect_sponsored_cancel_log(cancel_log_lines())
         self.assertEqual(result["status"],
                          "PASS_SIGMA607_SYNTHETIC_SPONSORED_CANCEL_TRACE_ONLY")
         self.assertTrue(result["two_input_proofs_reported"])
-        self.assertEqual(len(result["negative_scenarios"]), 8)
+        self.assertEqual(len(result["negative_scenarios"]), 10)
         self.assertFalse(result["safe_cancellation_proven"])
         self.assertFalse(result["minimum_box_liveness_proven"])
 
