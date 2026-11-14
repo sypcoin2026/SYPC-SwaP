@@ -242,18 +242,16 @@ SIGNED_END = "SIGMA607_SIGNED_SYNTHETIC_7_CASES_PASS"
 SIGNED_SCOPE = "NOT_SYPC_CORE_CONSENSUS_NOT_MEMPOOL_NOT_MINBOX_NOT_LIVENESS"
 
 
-def inspect_signed_transaction_log(raw: str) -> dict:
-    """Reject incomplete/duplicated labels in the synthetic two-input proof trace.
+def _inspect_case_trace(raw: str, *, expected_markers: frozenset[str],
+                        reject_prefix: str, negative_cases: frozenset[str],
+                        unsafe_tokens: tuple[str, ...], kind: str) -> list[str]:
+    """Common fail-closed check for all signed-lab evidence types.
 
-    Labels are NOT cryptographic proof attestations. Only Sigma6 runtime
-    verifies the actual proof. A faked log still needs independent detection.
+    The producer of a trace is untrusted. This checks labels and completeness,
+    NOT independent cryptographic authenticity of the underlying operation.
     """
     if type(raw) is not str or len(raw) > MAX_LOG:
-        raise FingerprintError("Signed trace invalid or oversized")
-    expected_markers = {
-        SIGNED_POSITIVE, SIGNED_SERIALIZATION, SIGNED_CONSERVATION,
-        SIGNED_END, SIGNED_SCOPE,
-    }
+        raise FingerprintError(kind + " trace invalid or oversized")
     seen = set()
     rejected = set()
     for raw_line in raw.splitlines():
@@ -261,32 +259,84 @@ def inspect_signed_transaction_log(raw: str) -> dict:
         for marker in expected_markers:
             if marker in line and not line.lstrip().startswith("echo "):
                 if marker in seen:
-                    raise FingerprintError("Duplicate signed transaction PASS marker")
+                    raise FingerprintError("Duplicate " + kind + " PASS marker")
                 seen.add(marker)
-        if "SIGMA607_SIGNED_REJECT:" in line:
-            name = line.split("SIGMA607_SIGNED_REJECT:", 1)[1]
-            if name not in SIGNED_REJECTIONS or name in rejected:
-                raise FingerprintError("Unknown or duplicate signed transaction negative")
+        if reject_prefix in line:
+            name = line.split(reject_prefix, 1)[1]
+            if name not in negative_cases or name in rejected:
+                raise FingerprintError("Unknown or duplicate " + kind + " negative")
             rejected.add(name)
-        if "[error]" in line or "SYPC607_SIGNED_UNSAFE_TRANSACTION_ACCEPTED" in line:
-            raise FingerprintError("Signed transaction verifier reported explicit failure")
-    if seen != expected_markers or rejected != SIGNED_REJECTIONS:
-        raise FingerprintError("Incomplete signed transaction evidence")
+        if "[error]" in line or any(t in line for t in unsafe_tokens):
+            raise FingerprintError(kind + " verifier reported explicit failure")
+    if seen != expected_markers or rejected != negative_cases:
+        raise FingerprintError("Incomplete " + kind + " evidence")
+    return sorted(rejected)
+
+
+CANCEL_REJECTIONS = frozenset((
+    "missing-order-proof", "missing-sponsor-proof",
+    "foreign-sponsor-proof", "redirect-refund-after-signature",
+    "fee-over-cap", "sponsor-insufficient", "sponsor-with-tokens",
+    "wrong-fee-script",
+))
+CANCEL_POSITIVE = "SIGMA607_CANCEL_PASS:two_owner_signatures"
+CANCEL_SERIALIZATION = "SIGMA607_CANCEL_SERIALIZATION_PASS"
+CANCEL_CONSERVATION = "SIGMA607_CANCEL_CONSERVATION_PASS"
+CANCEL_END = "SIGMA607_CANCEL_SYNTHETIC_9_CASES_PASS"
+CANCEL_SCOPE = "NOT_SYPC_CORE_CONSENSUS_NOT_REAL_LIVENESS_NOT_MINBOX_OR_FEES"
+
+
+def inspect_signed_transaction_log(raw: str) -> dict:
+    rejected = _inspect_case_trace(
+        raw, expected_markers=frozenset((
+            SIGNED_POSITIVE, SIGNED_SERIALIZATION, SIGNED_CONSERVATION,
+            SIGNED_END, SIGNED_SCOPE,
+        )),
+        reject_prefix="SIGMA607_SIGNED_REJECT:",
+        negative_cases=SIGNED_REJECTIONS,
+        unsafe_tokens=("SYPC607_SIGNED_UNSAFE_TRANSACTION_ACCEPTED",),
+        kind="signed transaction",
+    )
     return {
         "status": "PASS_SIGMA607_SYNTHETIC_SIGNED_TRACE_ONLY",
         "positive_both_input_checks": 1,
-        "negative_scenarios": sorted(rejected),
+        "negative_scenarios": rejected,
         "native_consensus_proven": False,
         "real_utxo_proven": False,
         "safe_cancellation_proven": False,
     }
 
 
+def inspect_sponsored_cancel_log(raw: str) -> dict:
+    rejected = _inspect_case_trace(
+        raw, expected_markers=frozenset((
+            CANCEL_POSITIVE, CANCEL_SERIALIZATION, CANCEL_CONSERVATION,
+            CANCEL_END, CANCEL_SCOPE,
+        )),
+        reject_prefix="SIGMA607_CANCEL_REJECT:",
+        negative_cases=CANCEL_REJECTIONS,
+        unsafe_tokens=("SYPC607_CANCEL_UNSAFE_SIGNED_TRANSACTION",
+                       "SYPC607_CANCEL_UNSAFE_CONTRACT_ACCEPTED"),
+        kind="sponsored cancellation",
+    )
+    return {
+        "status": "PASS_SIGMA607_SYNTHETIC_SPONSORED_CANCEL_TRACE_ONLY",
+        "two_input_proofs_reported": True,
+        "negative_scenarios": rejected,
+        "native_consensus_proven": False,
+        "safe_cancellation_proven": False,
+        "minimum_box_liveness_proven": False,
+    }
+
+
 def review(manifest_path: Path, log_path: Path, interpreter_log: Path | None = None,
-           signed_log: Path | None = None) -> dict:
+           signed_log: Path | None = None,
+           cancel_log: Path | None = None) -> dict:
     try:
         if signed_log is not None and interpreter_log is None:
             raise FingerprintError("Signed trace requires the interpreter trace")
+        if cancel_log is not None and signed_log is None:
+            raise FingerprintError("Sponsor trace requires all earlier signature traces")
         manifest = read_manifest(manifest_path)
         body = _read_local(log_path, MAX_LOG).decode("utf-8")
         result = inspect(manifest, body)
@@ -298,6 +348,10 @@ def review(manifest_path: Path, log_path: Path, interpreter_log: Path | None = N
             trace = _read_local(signed_log, MAX_LOG).decode("utf-8")
             result["signed"] = inspect_signed_transaction_log(trace)
             result["status"] = "PASS_SIGMA607_COMPILER_SCRIPT_SIGNED_TRACES_ONLY"
+        if cancel_log is not None:
+            trace = _read_local(cancel_log, MAX_LOG).decode("utf-8")
+            result["sponsor_cancel"] = inspect_sponsored_cancel_log(trace)
+            result["status"] = "PASS_SIGMA607_FOUR_LAB_TRACES_ONLY"
         return result
     except (UnicodeError, FingerprintError, OSError, ValueError) as exc:
         return {"status": "FAIL", "reason": str(exc),
@@ -310,13 +364,16 @@ def main(argv=None):
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--interpreter-log", type=Path, default=None)
     parser.add_argument("--signed-log", type=Path, default=None)
+    parser.add_argument("--cancel-log", type=Path, default=None)
     args = parser.parse_args(argv)
-    result = review(args.manifest, args.log, args.interpreter_log, args.signed_log)
+    result = review(args.manifest, args.log, args.interpreter_log,
+                    args.signed_log, args.cancel_log)
     print(json.dumps(result, sort_keys=True))
     return 0 if result["status"] in (
         "PASS_PINNED_SIGMA607_COMPILER_ONLY",
         "PASS_PINNED_SIGMA607_COMPILER_AND_SCRIPT_TRACE_ONLY",
         "PASS_SIGMA607_COMPILER_SCRIPT_SIGNED_TRACES_ONLY",
+        "PASS_SIGMA607_FOUR_LAB_TRACES_ONLY",
     ) else 2
 
 
