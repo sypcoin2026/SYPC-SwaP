@@ -72,12 +72,13 @@ object NativeSigma607SponsoredCancel {
   private def make(tree: ErgoTree, sponsorNative: Long = 1000L,
                    feeNative: Long = 200L, sponsorToken: Boolean = false,
                    feeScript: ErgoTree = feeTree,
-                   refundScript: ErgoTree = ownerTree): Fixture = {
+                   refundScript: ErgoTree = ownerTree,
+                   sponsorScript: ErgoTree = ownerTree): Fixture = {
     val order = new ErgoBoxCandidate(2000000L, tree, 0, lockedTokens)
       .toBox(ErgoBox.allZerosModifierId, 0.toShort)
     val extra = if (sponsorToken)
       Colls.fromArray(Array((otherId, 1L))) else Colls.emptyColl[ErgoBox.Token]
-    val sponsor = new ErgoBoxCandidate(sponsorNative, ownerTree, 0, extra)
+    val sponsor = new ErgoBoxCandidate(sponsorNative, sponsorScript, 0, extra)
       .toBox(ErgoBox.allZerosModifierId, 1.toShort)
     val refundNative = Math.subtractExact(Math.addExact(order.value, sponsorNative), feeNative)
     val refund = new ErgoBoxCandidate(refundNative, refundScript, 0, lockedTokens)
@@ -172,6 +173,25 @@ object NativeSigma607SponsoredCancel {
       f.unsigned.messageToSign).isFailure
   }
 
+  private def rejectsContractWithValidSponsor(f: Fixture,
+                                              foreignSponsor: Boolean): Boolean = {
+    // Eliminate a false-positive: the sponsor must be independently
+    // provable for this exact transaction before attributing rejection
+    // to the SELL cancellation covenant.
+    val proof = if (foreignSponsor)
+      outsiderSigner.prove(f.sponsor.ergoTree, context(f, f.unsigned, 1),
+        f.unsigned.messageToSign).get
+    else ownerSigner.prove(f.sponsor.ergoTree, context(f, f.unsigned, 1),
+      f.unsigned.messageToSign).get
+    require(proof.proof.nonEmpty, "SYPC607_CANCEL_ADVERSARIAL_SPONSOR_NOT_SIGNED")
+    val inNative = f.inputs.foldLeft(BigInt(0))((a, b) => a + b.value)
+    val outNative = f.unsigned.outputCandidates.foldLeft(BigInt(0))((a, b) => a + b.value)
+    require(inNative == outNative, "SYPC607_CANCEL_ADVERSARIAL_NATIVE_IMBALANCE")
+    require(f.order.additionalTokens == f.unsigned.outputCandidates.head.additionalTokens,
+      "SYPC607_CANCEL_ADVERSARIAL_ORDER_TOKENS_CHANGED")
+    rejectsContract(f)
+  }
+
   def main(args: Array[String]): Unit = {
     require(args.length == 1, "SYPC607_CANCEL_SCRIPT_REQUIRED")
     val tree = script(args(0))
@@ -204,7 +224,20 @@ object NativeSigma607SponsoredCancel {
         "SYPC607_CANCEL_UNSAFE_CONTRACT_ACCEPTED:" + scenario)
       println("SIGMA607_CANCEL_REJECT:" + scenario)
     }
-    println("SIGMA607_CANCEL_SYNTHETIC_9_CASES_PASS")
+
+    // Unlike post-signature tampering, these TWO attack transactions
+    // are built before signing. Both sponsors have a genuine proof
+    // on the SAME messageToSign; only the contract must reject them.
+    val authenticatedSponsorAttacks = Vector(
+      ("foreign-sponsor-script", make(tree, sponsorScript = feeTree), true),
+      ("redirect-refund-before-signing", make(tree, refundScript = feeTree), false)
+    )
+    authenticatedSponsorAttacks.foreach { case (scenario, sample, foreign) =>
+      require(rejectsContractWithValidSponsor(sample, foreign),
+        "SYPC607_CANCEL_UNSAFE_CONTRACT_ACCEPTED:" + scenario)
+      println("SIGMA607_CANCEL_REJECT:" + scenario)
+    }
+    println("SIGMA607_CANCEL_SYNTHETIC_11_CASES_PASS")
     println("NOT_SYPC_CORE_CONSENSUS_NOT_REAL_LIVENESS_NOT_MINBOX_OR_FEES")
   }
 }
