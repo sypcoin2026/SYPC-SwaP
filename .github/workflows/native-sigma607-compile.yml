@@ -98,3 +98,17 @@ jobs:
             | tee "$RUNNER_TEMP/sigma607-signed-review.json"
           grep -q '"status": "PASS_SIGMA607_COMPILER_SCRIPT_SIGNED_TRACES_ONLY"' "$RUNNER_TEMP/sigma607-signed-review.json"
           echo "SIGMA607_SIGNED_AND_INDEPENDENT_AUDITOR_PASS; NOT_SYPC_CONSENSUS"
+      - name: Execute sponsor-funded SELL cancellation requiring TWO owner signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd research/native6
+          sbt -batch 'runMain org.sypcoin.swap.NativeSigma607SponsoredCancel ../ergo_script/AtomicSellSponsorRefund.sc' \
+            2>&1 | tee "$RUNNER_TEMP/sigma607-cancel.log"
+          grep -q 'SIGMA607_CANCEL_PASS:two_owner_signatures' "$RUNNER_TEMP/sigma607-cancel.log"
+          grep -q 'SIGMA607_CANCEL_SERIALIZATION_PASS' "$RUNNER_TEMP/sigma607-cancel.log"
+          grep -q 'SIGMA607_CANCEL_CONSERVATION_PASS' "$RUNNER_TEMP/sigma607-cancel.log"
+          test "$(grep -c 'SIGMA607_CANCEL_REJECT:' "$RUNNER_TEMP/sigma607-cancel.log")" -eq 8
+          grep -q 'SIGMA607_CANCEL_SYNTHETIC_9_CASES_PASS' "$RUNNER_TEMP/sigma607-cancel.log"
+          grep -q 'NOT_SYPC_CORE_CONSENSUS_NOT_REAL_LIVENESS_NOT_MINBOX_OR_FEES' "$RUNNER_TEMP/sigma607-cancel.log"
+          echo "SIGMA607_SPONSOR_TWO_PROOFS_LAB_PASS; NOT_SYPC_CONSENSUS"
