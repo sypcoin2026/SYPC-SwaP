@@ -108,8 +108,10 @@ jobs:
           grep -q 'SIGMA607_CANCEL_PASS:two_owner_signatures' "$RUNNER_TEMP/sigma607-cancel.log"
           grep -q 'SIGMA607_CANCEL_SERIALIZATION_PASS' "$RUNNER_TEMP/sigma607-cancel.log"
           grep -q 'SIGMA607_CANCEL_CONSERVATION_PASS' "$RUNNER_TEMP/sigma607-cancel.log"
-          test "$(grep -c 'SIGMA607_CANCEL_REJECT:' "$RUNNER_TEMP/sigma607-cancel.log")" -eq 8
-          grep -q 'SIGMA607_CANCEL_SYNTHETIC_9_CASES_PASS' "$RUNNER_TEMP/sigma607-cancel.log"
+          test "$(grep -c 'SIGMA607_CANCEL_REJECT:' "$RUNNER_TEMP/sigma607-cancel.log")" -eq 10
+          grep -q 'SIGMA607_CANCEL_SYNTHETIC_11_CASES_PASS' "$RUNNER_TEMP/sigma607-cancel.log"
+          grep -q 'SIGMA607_CANCEL_REJECT:foreign-sponsor-script' "$RUNNER_TEMP/sigma607-cancel.log"
+          grep -q 'SIGMA607_CANCEL_REJECT:redirect-refund-before-signing' "$RUNNER_TEMP/sigma607-cancel.log"
           grep -q 'NOT_SYPC_CORE_CONSENSUS_NOT_REAL_LIVENESS_NOT_MINBOX_OR_FEES' "$RUNNER_TEMP/sigma607-cancel.log"
           # Four independent evidence layers are required: pinned compiler,
           # BUY/SELL interpreter, signed SELL fill, and TWO-signature cancel.
