@@ -71,6 +71,37 @@ Las cifras permiten distinguir fallos sin inspeccionar la línea de comandos
 que podría contener nombres privados o credenciales. Ejecutar con el usuario
 del proceso; nunca con `sudo` por rutina.
 
+## Cuatro candidatos de launcher reales: comparar sin cambiar la JVM
+
+En la máquina del operador, la revisión anterior produjo
+`classpath_entries=70`, `classpath_directories=9`, `classpath_jar_files=61`,
+`classpath_missing_entries=0`, `launcher_candidates=4`,
+`sigma607_candidates=1`. Este resultado por sí solo **no** indica cuál
+de las cuatro copias fue realmente cargada ni cuál es auténtica.
+
+La siguiente revisión calcula SHA-256 **de los bytes de cada una de las
+clases launcher** dentro de cada directorio y JAR. En caso de múltiples
+candidatos, `SYPC_REWARD_LAUNCHER_CANDIDATES` muestra exclusivamente:
+
+- índices numéricos en el classpath (base cero, sin rutas);
+- tipo `jar` o `class_directory`;
+- SHA-256 del JAR, si es un archivo;
+- SHA-256 de las clases `SypRewardTestnetLauncher.class` y
+  `SypRewardTestnetLauncher$.class`, cuando estén presentes;
+- número de conjuntos distintos de hashes de clase.
+
+Un solo conjunto de hashes idéntico sugiere bytecode duplicado en distintos
+lugares, pero **no prueba** identidad del proceso cargado, dependencias
+efectivas ni procedencia desde un commit concreto. Si hay distintos hashes,
+se evidencia una discrepancia que debe investigarse; el script **no elige**
+automáticamente el primer candidato, aunque Java pueda hacerlo en un
+classpath convencional. Continúa con rechazo seguro.
+
+No editar classpaths, borrar JAR, reconstruir Core, detener/minar, reiniciar
+procesos, cambiar red, manipular carteras ni publicar rutas/argumentos para
+resolver esta ambigüedad. El trabajo de procedencia es independiente del
+lanzamiento de SYPC-SwaP.
+
 ## Interpretación
 
 `LOCAL_ARTIFACT_HASHES_ONLY` significa que obtuvimos huellas locales de
