@@ -59,10 +59,82 @@ def signed_log_lines():
     ) + "\n"
 
 
+def cancel_log_lines():
+    return "\n".join(
+        ["[info] " + checker.CANCEL_POSITIVE,
+         "[info] " + checker.CANCEL_SERIALIZATION,
+         "[info] " + checker.CANCEL_CONSERVATION]
+        + ["[info] SIGMA607_CANCEL_REJECT:" + case
+           for case in sorted(checker.CANCEL_REJECTIONS)]
+        + ["[info] " + checker.CANCEL_END, "[info] " + checker.CANCEL_SCOPE]
+    ) + "\n"
+
+
 class Native6ReviewTests(unittest.TestCase):
     def setUp(self):
         self.manifest = checker.read_manifest(PINS)
         self.good = log_lines(self.manifest)
+
+    def test_sponsor_cancel_requires_two_proof_claims_and_ten_rejections(self):
+        result = checker.inspect_sponsored_cancel_log(cancel_log_lines())
+        self.assertEqual(result["status"],
+                         "PASS_SIGMA607_SYNTHETIC_SPONSORED_CANCEL_TRACE_ONLY")
+        self.assertTrue(result["two_input_proofs_reported"])
+        self.assertEqual(len(result["negative_scenarios"]), 10)
+        self.assertFalse(result["safe_cancellation_proven"])
+        self.assertFalse(result["minimum_box_liveness_proven"])
+
+    def test_sponsor_cancel_missing_or_repeated_case_fails(self):
+        scenario = sorted(checker.CANCEL_REJECTIONS)[0]
+        line = "[info] SIGMA607_CANCEL_REJECT:" + scenario + "\n"
+        with self.assertRaisesRegex(checker.FingerprintError, "Incomplete"):
+            checker.inspect_sponsored_cancel_log(
+                cancel_log_lines().replace(line, "", 1))
+        with self.assertRaisesRegex(checker.FingerprintError, "duplicate"):
+            checker.inspect_sponsored_cancel_log(cancel_log_lines() + line)
+
+    def test_sponsor_cancel_missing_or_repeated_success_fails(self):
+        with self.assertRaisesRegex(checker.FingerprintError, "Incomplete"):
+            checker.inspect_sponsored_cancel_log(
+                cancel_log_lines().replace(checker.CANCEL_SERIALIZATION, "NOT_RUN"))
+        with self.assertRaisesRegex(checker.FingerprintError, "Duplicate"):
+            checker.inspect_sponsored_cancel_log(
+                cancel_log_lines() + checker.CANCEL_POSITIVE + "\n")
+        with self.assertRaisesRegex(checker.FingerprintError, "Incomplete"):
+            checker.inspect_sponsored_cancel_log(
+                cancel_log_lines().replace(checker.CANCEL_SCOPE, ""))
+
+    def test_sponsor_cancel_unknown_negative_or_explicit_failure_fails(self):
+        with self.assertRaisesRegex(checker.FingerprintError, "negative"):
+            checker.inspect_sponsored_cancel_log(
+                cancel_log_lines() + "SIGMA607_CANCEL_REJECT:made-up\n")
+        for error in ("[error] failed",
+                      "SYPC607_CANCEL_UNSAFE_SIGNED_TRANSACTION:attack",
+                      "SYPC607_CANCEL_UNSAFE_CONTRACT_ACCEPTED:attack"):
+            with self.subTest(error=error):
+                with self.assertRaisesRegex(checker.FingerprintError, "failure"):
+                    checker.inspect_sponsored_cancel_log(cancel_log_lines() + error + "\n")
+
+    def test_complete_sponsor_report_requires_all_four_trace_files(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            comp = root / "compile.log"
+            smoke = root / "script.log"
+            signed = root / "signed.log"
+            cancel = root / "cancel.log"
+            comp.write_text(self.good)
+            smoke.write_text(interpreter_log())
+            signed.write_text(signed_log_lines())
+            cancel.write_text(cancel_log_lines())
+            result = checker.review(PINS, comp, smoke, signed, cancel)
+            self.assertEqual(result["status"], "PASS_SIGMA607_FOUR_LAB_TRACES_ONLY")
+            self.assertEqual(len(result["sponsor_cancel"]["negative_scenarios"]), 10)
+            self.assertFalse(result["ready_for_deployment"])
+            cancel.write_text("incomplete")
+            self.assertEqual(checker.review(PINS, comp, smoke, signed, cancel)["status"],
+                             "FAIL")
+            self.assertEqual(checker.review(PINS, comp, smoke, cancel_log=cancel)["status"],
+                             "FAIL")
 
     def test_signed_trace_requires_evidence_from_both_inputs(self):
         result = checker.inspect_signed_transaction_log(signed_log_lines())
