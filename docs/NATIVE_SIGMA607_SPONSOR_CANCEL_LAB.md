@@ -19,7 +19,7 @@ A diferencia de una firma para un solo input, esta prueba crea dos `ProverResult
 
 Las claves del laboratorio son escalares públicos y predeterminados. No usarlos para ninguna wallet personal ni tesorería SYPC.
 
-## Regresiones adversariales (8)
+## Regresiones adversariales (10)
 
 1. Falta prueba de firma de la orden.
 2. Falta prueba de firma del patrocinador.
@@ -29,8 +29,10 @@ Las claves del laboratorio son escalares públicos y predeterminados. No usarlos
 6. Patrocinador con menos nativo que la comisión, que obligaría a reducir el colateral de la orden.
 7. Patrocinador con tokens, aunque el contrato exige patrocinio exclusivamente nativo.
 8. Output de comisión con script distinto al fijado.
+9. Caja patrocinadora con un script de **otra identidad legítimamente firmada**: la prueba del patrocinador extranjero es válida, pero el contrato debe impedir la cancelación.
+10. Desvío del reembolso **antes de firmar**: el patrocinador sigue firmando correctamente el mismo mensaje, pero el contrato debe impedir devolver los tokens a una identidad ajena.
 
-Los cuatro primeros se comprueban contra las pruebas/firmas de la transacción ya firmada; los cuatro últimos **no deberían poder generar la prueba de cancelación del propietario**, y deben rechazarse sin excepciones convertidas en PASS.
+Los cuatro primeros se comprueban contra pruebas/firmas de la transacción ya firmada. Los casos 5–8 prueban rechazo de la rama de cancelación del propietario. Los casos 9 y 10 se construyen **antes de firmar**: se exige una prueba válida e independiente del patrocinador sobre el mensaje exacto y se verifica que el contrato de la orden no pueda ser probado. Esto evita confundir la protección del contrato con una firma ausente o una transacción alterada después de firmar.
 
 ## Qué falta demostrar
 
