@@ -90,6 +90,43 @@ class FingerprintReadOnlyTests(unittest.TestCase):
         self.assertNotIn(str(self.cwd), snapshot)
         self.assertNotIn("192.168.", snapshot)
 
+    def test_scala_object_module_only_is_recognised(self):
+        classes = self.cwd / "classes"
+        module = classes / CLASS_FILES["reward_launcher_module"]
+        module.parent.mkdir(parents=True, exist_ok=True)
+        module.write_bytes(b"scala-object-module-only")
+        self.add_sigma()
+        self.add_proc(4555, ["java", "-cp",
+                              "classes:lib/" + SIGMA_JAR, MAIN_CLASS])
+        record = select_process(pid=4555, proc_root=self.proc)
+        self.assertEqual(len(record["launcher_artifacts"]), 1)
+        self.assertIn("reward_launcher_module",
+                      record["launcher_artifacts"][0]["class_sha256"])
+        self.assertEqual(record["classpath_directories"], 1)
+        self.assertEqual(record["classpath_jar_files"], 1)
+        self.assertEqual(record["classpath_missing_entries"], 0)
+
+    def test_missing_launcher_class_is_detectable_without_path_disclosure(self):
+        self.add_sigma()
+        self.add_proc(4666, ["java", "-cp",
+                              "lib/" + SIGMA_JAR, MAIN_CLASS, "api_secret=REDACT"])
+        record = select_process(pid=4666, proc_root=self.proc)
+        self.assertEqual(len(record["launcher_artifacts"]), 0)
+        self.assertEqual(len(record["sigma607_sha256"]), 1)
+        self.assertNotIn("api_secret", json.dumps(record))
+        self.assertNotIn(str(self.cwd), json.dumps(record))
+
+    def test_two_distinct_launcher_artifacts_remain_ambiguous(self):
+        self.add_classes()
+        second = self.cwd / "duplicate" / CLASS_FILES["reward_launcher"]
+        second.parent.mkdir(parents=True, exist_ok=True)
+        second.write_bytes(b"second launcher - NOT safe to auto-select")
+        self.add_sigma()
+        self.add_proc(4777, ["java", "-cp",
+                              "classes:duplicate:lib/" + SIGMA_JAR, MAIN_CLASS])
+        record = select_process(pid=4777, proc_root=self.proc)
+        self.assertEqual(len(record["launcher_artifacts"]), 2)
+
     def test_multiple_reward_launchers_are_ambiguous(self):
         self.add_classes()
         self.add_sigma()
