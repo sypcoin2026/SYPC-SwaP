@@ -28,6 +28,7 @@ CLASS_FILES = {
 MAX_CMDLINE = 262_144
 MAX_CLASSPATH_ITEMS = 512
 MAX_ARTIFACT_BYTES = 1_000_000_000
+MAX_CLASS_BYTES = 4_194_304
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 LAUNCHER_LABELS = frozenset({"reward_launcher", "reward_launcher_module"})
 
@@ -121,18 +122,37 @@ def fingerprint_artifact(path: Path) -> dict | None:
     if not path.is_file() or path.suffix.lower() != ".jar":
         return None
     is_sigma = path.name == SIGMA_JAR
+    class_hashes = {}
     try:
         with zipfile.ZipFile(path) as archive:
-            names = set(archive.namelist())
-    except (OSError, zipfile.BadZipFile) as exc:
+            # A JAR containing duplicate class entries is not a dependable
+            # fingerprint source: different readers can select different bytes.
+            members = {}
+            for info in archive.infolist():
+                if info.filename in CLASS_FILES.values():
+                    if info.filename in members:
+                        raise FingerprintError("DUPLICATE_CLASS_IN_JAR")
+                    members[info.filename] = info
+            for label, relative in CLASS_FILES.items():
+                info = members.get(relative)
+                if info is None:
+                    continue
+                if info.file_size > MAX_CLASS_BYTES:
+                    raise FingerprintError("JAR_CLASS_TOO_LARGE")
+                with archive.open(info) as stream:
+                    data = stream.read(MAX_CLASS_BYTES + 1)
+                if len(data) != info.file_size or len(data) > MAX_CLASS_BYTES:
+                    raise FingerprintError("JAR_CLASS_SIZE_MISMATCH")
+                class_hashes[label] = hashlib.sha256(data).hexdigest()
+    except (OSError, zipfile.BadZipFile, RuntimeError) as exc:
         raise FingerprintError("CLASSPATH_JAR_UNREADABLE") from exc
-    found = sorted(label for label, rel in CLASS_FILES.items() if rel in names)
-    if not found and not is_sigma:
+    if not class_hashes and not is_sigma:
         return None
     return {
         "type": "jar",
         "sha256": sha256_file(path),
-        "class_labels": found,
+        "class_sha256": class_hashes,
+        "class_labels": sorted(class_hashes),
         "is_exact_sigma607_filename": is_sigma,
     }
 
@@ -149,16 +169,16 @@ def inspect_process(pid: int, proc_root: Path = Path("/proc")) -> dict | None:
         raise FingerprintError("PROCESS_CWD_UNREADABLE") from exc
     entries = expand_classpath(cp, cwd)
     artifacts = []
-    for entry in entries:
+    for index, entry in enumerate(entries):
         item = fingerprint_artifact(entry)
         if item is not None:
-            artifacts.append(item)
+            artifacts.append((index, item))
     launchers = [
-        a for a in artifacts if
-        (LAUNCHER_LABELS.intersection(a.get("class_labels", [])) or
-         LAUNCHER_LABELS.intersection(a.get("class_sha256", {}).keys()))
+        {"classpath_index": index, **a}
+        for index, a in artifacts
+        if LAUNCHER_LABELS.intersection(a.get("class_sha256", {}).keys())
     ]
-    sigmas = [a["sha256"] for a in artifacts if a.get("is_exact_sigma607_filename")]
+    sigmas = [a["sha256"] for _, a in artifacts if a.get("is_exact_sigma607_filename")]
     # Counts only, NEVER a classpath entry, user directory or process argument.
     # Distinguish missing artifacts from more than one candidate, without
     # silently accepting the first matching classloader entry.
@@ -228,6 +248,27 @@ def main() -> int:
                 "launcher_candidates": len(record["launcher_artifacts"]),
                 "sigma607_candidates": len(record["sigma607_sha256"]),
             }, sort_keys=True), file=sys.stderr)
+            if record["launcher_artifacts"]:
+                # Only positions, artifact type and cryptographic hashes.
+                # Never leak paths or JVM argv; never pick the first artifact.
+                details = [
+                    {
+                        "classpath_index": candidate["classpath_index"],
+                        "type": candidate["type"],
+                        "jar_sha256": candidate.get("sha256"),
+                        "class_sha256": candidate.get("class_sha256", {}),
+                    }
+                    for candidate in record["launcher_artifacts"]
+                ]
+                fingerprints = {
+                    tuple(sorted(item["class_sha256"].items()))
+                    for item in details
+                }
+                print("SYPC_REWARD_LAUNCHER_CANDIDATES:" + json.dumps({
+                    "entries": details,
+                    "distinct_class_fingerprint_sets": len(fingerprints),
+                    "first_candidate_index_is_not_verified_runtime_selection": True,
+                }, sort_keys=True), file=sys.stderr)
             raise FingerprintError(
                 "LAUNCHER_CODE_ARTIFACT_MISSING"
                 if not record["launcher_artifacts"]
