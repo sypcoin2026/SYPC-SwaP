@@ -45,6 +45,32 @@ antes de continuar. No seleccionar arbitrariamente el primero; si el proceso
 correcto está identificado de forma independiente, se puede indicar
 `--pid 12345` (usar el PID real, nunca inventado).
 
+## Diagnóstico sin revelar rutas ni argumentos
+
+La primera versión devolvía `LAUNCHER_CODE_ARTIFACT_NOT_UNIQUE` tanto
+cuando encontraba **cero** clases launcher como cuando había **varios**
+candidatos en el classpath. El equipo del operador observó esta salida con
+el checksum del comprobador correcto. No es un fallo de la JVM ni de la red.
+
+La revisión reconoce también la clase de módulo Scala
+`SypRewardTestnetLauncher$.class`, y cuando hay 0 o más de 1 artefactos
+imprime `SYPC_REWARD_SAFE_COUNTS` con exclusivamente **contadores**:
+entradas del classpath, directorios, JAR, entradas faltantes, candidatos
+launcher y candidatos Sigma. No publica nombres de archivos, rutas, JVM
+arguments ni secretos. Continua abortando ante cualquier ambigüedad.
+
+- `LAUNCHER_CODE_ARTIFACT_MISSING`: **cero** candidatos; estudiar si la
+  versión y la estructura real de empaquetado difieren. No asumir que
+  la JVM coincide con el repositorio.
+- `MULTIPLE_LAUNCHER_CODE_ARTIFACTS`: **dos o más**; un classpath ambiguo
+  no se acepta, aunque Java pudiera elegir el primer elemento.
+- `SIGMA607_JAR_NOT_UNIQUE` o `SIGMA607_HASH_MISMATCH`:
+  falló el anclaje de dependencia; no modificar la red para ocultarlo.
+
+Las cifras permiten distinguir fallos sin inspeccionar la línea de comandos
+que podría contener nombres privados o credenciales. Ejecutar con el usuario
+del proceso; nunca con `sudo` por rutina.
+
 ## Interpretación
 
 `LOCAL_ARTIFACT_HASHES_ONLY` significa que obtuvimos huellas locales de
