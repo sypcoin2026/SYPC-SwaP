@@ -1,130 +1,40 @@
-# SYPC Reward — huellas locales de los artefactos de la JVM (SOLO LECTURA)
+# Verificación de procedencia de Reward
 
-Fecha: 2026-11-14. Estado: **laboratorio / NO GO**. Válido para el productor actual
-con launcher `org.ergoplatform.sypcoin.SypRewardTestnetLauncher`, **no V60**.
+El comprobador de este PR sirve para inventariar el classpath de Reward en Linux y comparar sus archivos con los de una compilación independiente. La [auditoría del 14 de noviembre](REWARD_RUNTIME_AUDIT_20261114.md) recoge los cuatro artefactos del productor, su reconstrucción y el alcance de las pruebas de Swap.
 
-## Objetivo
+## Inventario de solo lectura
 
-El test nativo de [sypcoin-core PR #21](https://github.com/sypcoin2026/sypcoin-core/pull/21)
-valida transacciones sintéticas contra las clases Reward de GitHub. El inventario
-previo identificó Java 11 y Sigma 6.0.7 en el nodo real, pero **no identifica el
-commit del código que ese proceso está ejecutando**. Esta prueba NO equivale a
-un ensayo de cadena ni a una atestación de procedencia del binario.
+```bash
+python3 -B tools/reward_runtime_artifact_fingerprint.py
+```
 
-`tools/reward_runtime_artifact_fingerprint.py` identifica exactamente un
-proceso Java cuyo argumento principal sea la clase Reward, obtiene su classpath
-de `/proc` SIN mostrar argumentos ni rutas, y calcula SHA-256 de:
+Ejecutar con el usuario de Reward. El script descubre la JVM por su clase principal exacta. Se puede indicar `--pid` cuando ya se conoce el proceso por evidencia externa. Lee metadatos de `/proc` y de los archivos del classpath. Comprueba en memoria y sin emitir valores si el entorno inicial contiene opciones que pueden cambiar la carga. La salida contiene contadores, posiciones, identificadores de clase conocidos y huellas. Un fallo de lectura devuelve un código fijo.
 
-- JAR Sigma 6.0.7 que figura en el classpath.
-- JAR que contiene la clase `SypRewardTestnetLauncher`, o los bytes de la
-  clase si se carga desde directorio, junto a un subconjunto de clases Core
-  cuando aparezcan en el mismo directorio.
+El inventario respeta el orden y las repeticiones del classpath. Exige las dos clases de entrada del launcher y el SHA-256 de Sigma 6.0.7 cotejado con Maven Central. Rechaza duplicados para las clases vigiladas e indicios de redirección de la carga mediante comodines, agentes, opciones JVM ambiguas o metadatos de JAR. La salida de un classpath ambiguo incluye `SYPC_REWARD_DISK_EVIDENCE` para cotejar sus clases, con código de salida 2.
 
-El resultado **omite argv, variables de entorno, configuración, IP, claves,
-wallets, rutas de usuario y datos privados**. No usa red, shell, procesos
-subordinados, GPU, Java Attach, REST o escrituras. No lee el estado del nodo,
-ni afirma nada sobre el compilador/reproducibilidad del JAR.
+## Comparación con una compilación independiente
 
-## Ejecución en el sobremesa, SIN detener ni reiniciar el nodo
-
-Tras descargar y revisar el script de la rama experimental, ejecutar con el
-usuario que ejecuta Reward, desde una copia local:
+Preparar un checkout fijado por commit, validar la procedencia de sus inputs y compilar en un directorio nuevo. Guardar únicamente el valor de `export Compile / fullClasspath` en un archivo local de una línea, con todas las entradas absolutas y en el orden de despliegue. Si el artefacto combina fuentes de distintos commits o módulos, la receta y sus huellas forman parte de la evidencia firmada de la compilación. El campo `core_commit` identifica la base que indica el constructor.
 
 ```bash
 python3 -B tools/reward_runtime_artifact_fingerprint.py \
-  --expected-sigma-sha256 \
-  390bc91cb6201c26ae5309fd25c96f3e427343ed9b75968a2db96f365ca7d31b
+  --build-classpath-file "$BUILD_CLASSPATH_FILE" \
+  --build-java "$JAVA_HOME/bin/java" \
+  --core-commit "$CORE_COMMIT" > "$REWARD_BUILD_MANIFEST"
+
+sha256sum "$REWARD_BUILD_MANIFEST"
 ```
 
-El SHA de Sigma es **la huella observada en el inventario del 14/11/2026**,
-no una atestación independiente de publicación de sigma-state. Si ha cambiado,
-el script falla en vez de aceptarlo silenciosamente.
+El manifiesto registra, en orden, el tipo y SHA-256 de cada JAR y de todo el árbol de cada directorio del classpath, incluidos los recursos. El hash de un directorio incorpora su estructura, los nombres relativos y el SHA-256 de cada archivo, en orden por bytes. También registra hashes del lanzador Java, `libjvm.so`, la imagen de módulos y el descriptor de Java 11. El modo estricto exige rutas canónicas, rechaza enlaces simbólicos dentro de los árboles y rechaza duplicados de las clases Core y Sigma, aunque los bytes coincidan.
 
-Si hay más de un launcher en el mismo equipo, se debe investigar la causa
-antes de continuar. No seleccionar arbitrariamente el primero; si el proceso
-correcto está identificado de forma independiente, se puede indicar
-`--pid 12345` (usar el PID real, nunca inventado).
+Publicar o entregar mediante un canal de confianza el hash del manifiesto junto con la evidencia de compilación correspondiente. Verificar la instalación contra ese hash, obtenido independientemente de la máquina o instalación que se examina.
 
-## Diagnóstico sin revelar rutas ni argumentos
+```bash
+python3 -B tools/reward_runtime_artifact_fingerprint.py \
+  --manifest "$REWARD_BUILD_MANIFEST" \
+  --expected-manifest-sha256 "$TRUSTED_MANIFEST_SHA256"
+```
 
-La primera versión devolvía `LAUNCHER_CODE_ARTIFACT_NOT_UNIQUE` tanto
-cuando encontraba **cero** clases launcher como cuando había **varios**
-candidatos en el classpath. El equipo del operador observó esta salida con
-el checksum del comprobador correcto. No es un fallo de la JVM ni de la red.
+`artifact_manifest_match: true` acredita que la captura en disco concuerda con los bytes descritos por el manifiesto fijado. La vinculación con el commit depende de la evidencia externa de compilación. El programa conserva `git_commit_verified`, `runtime_class_loading_verified` y `chain_or_consensus_verified` en `false`. Para una ejecución futura, usar artefactos de solo lectura, registrar el hash firmado del manifiesto e iniciar la JVM descartable con traza `class+load`. Vincular en esa evidencia el arranque, los orígenes observados de las clases Core/Sigma y la identidad y parámetros de la cadena comprobados por separado.
 
-La revisión reconoce también la clase de módulo Scala
-`SypRewardTestnetLauncher$.class`, y cuando hay 0 o más de 1 artefactos
-imprime `SYPC_REWARD_SAFE_COUNTS` con exclusivamente **contadores**:
-entradas del classpath, directorios, JAR, entradas faltantes, candidatos
-launcher y candidatos Sigma. No publica nombres de archivos, rutas, JVM
-arguments ni secretos. Continua abortando ante cualquier ambigüedad.
-
-- `LAUNCHER_CODE_ARTIFACT_MISSING`: **cero** candidatos; estudiar si la
-  versión y la estructura real de empaquetado difieren. No asumir que
-  la JVM coincide con el repositorio.
-- `MULTIPLE_LAUNCHER_CODE_ARTIFACTS`: **dos o más**; un classpath ambiguo
-  no se acepta, aunque Java pudiera elegir el primer elemento.
-- `SIGMA607_JAR_NOT_UNIQUE` o `SIGMA607_HASH_MISMATCH`:
-  falló el anclaje de dependencia; no modificar la red para ocultarlo.
-
-Las cifras permiten distinguir fallos sin inspeccionar la línea de comandos
-que podría contener nombres privados o credenciales. Ejecutar con el usuario
-del proceso; nunca con `sudo` por rutina.
-
-## Cuatro candidatos de launcher reales: comparar sin cambiar la JVM
-
-En la máquina del operador, la revisión anterior produjo
-`classpath_entries=70`, `classpath_directories=9`, `classpath_jar_files=61`,
-`classpath_missing_entries=0`, `launcher_candidates=4`,
-`sigma607_candidates=1`. Este resultado por sí solo **no** indica cuál
-de las cuatro copias fue realmente cargada ni cuál es auténtica.
-
-La siguiente revisión calcula SHA-256 **de los bytes de cada una de las
-clases launcher** dentro de cada directorio y JAR. En caso de múltiples
-candidatos, `SYPC_REWARD_LAUNCHER_CANDIDATES` muestra exclusivamente:
-
-- índices numéricos en el classpath (base cero, sin rutas);
-- tipo `jar` o `class_directory`;
-- SHA-256 del JAR, si es un archivo;
-- SHA-256 de las clases `SypRewardTestnetLauncher.class` y
-  `SypRewardTestnetLauncher$.class`, cuando estén presentes;
-- número de conjuntos distintos de hashes de clase.
-
-Un solo conjunto de hashes idéntico sugiere bytecode duplicado en distintos
-lugares, pero **no prueba** identidad del proceso cargado, dependencias
-efectivas ni procedencia desde un commit concreto. Si hay distintos hashes,
-se evidencia una discrepancia que debe investigarse; el script **no elige**
-automáticamente el primer candidato, aunque Java pueda hacerlo en un
-classpath convencional. Continúa con rechazo seguro.
-
-No editar classpaths, borrar JAR, reconstruir Core, detener/minar, reiniciar
-procesos, cambiar red, manipular carteras ni publicar rutas/argumentos para
-resolver esta ambigüedad. El trabajo de procedencia es independiente del
-lanzamiento de SYPC-SwaP.
-
-## Interpretación
-
-`LOCAL_ARTIFACT_HASHES_ONLY` significa que obtuvimos huellas locales de
-artefactos del classpath. `git_commit_verified: false` y
-`chain_or_consensus_verified: false` son deliberadamente **siempre false**.
-
-Para demostrar que el Core activo coincide con el código examinado, se
-necesita una compilación reproducible o una cadena de procedencia firmada,
-con hashes que coincidan, más los parámetros reales del perfil y la identidad
-de génesis. Si el código se carga desde directorios de clases, los hashes
-de unas pocas clases no prueban el directorio completo ni posibles cargas
-dinámicas. No usar estos resultados para desplegar SYPC-SwaP o mover fondos.
-
-## Protección y limitaciones
-
-- Solo Linux; lee `/proc/<pid>/cmdline`, `/proc/<pid>/cwd` y artefactos
-  del classpath, nunca `/proc/<pid>/environ`.
-- No se sube el resultado completo a GitHub ni se crea archivo automático.
-  Si se comparte una captura, revísese manualmente antes de publicarla.
-- Un proceso sin classpath explícito, JAR ausente, hashes Sigma inconsistentes,
-  más de un launcher o artefacto ambiguo debe causar fallo cerrado.
-- Se prueban en CI únicamente árboles `/proc` sintéticos; CI no accede al
-  ordenador del usuario ni prueba la ejecución en el nodo real.
-- El proceso podría tener clases inyectadas o cargadas dinámicamente; tampoco
-  se prueba inmutabilidad temporal del JAR. Para operación real hay que
-  preparar una cadena separada y desechable, con UTXO nuevos.
+El modo manifiesto lee todo el classpath y la imagen de módulos. Está previsto para instalaciones preparadas para auditoría y requiere artefactos estables durante la captura. La traza y los metadatos propios de la máquina deben conservarse en el entorno privado. [Registro de carga de clases en Java 11](https://docs.oracle.com/en/java/javase/11/tools/java.html#GUID-0F2D31A1-3B33-4FE5-8197-46F2B6DC5051).
