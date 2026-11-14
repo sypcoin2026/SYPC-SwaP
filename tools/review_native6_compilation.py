@@ -277,12 +277,13 @@ CANCEL_REJECTIONS = frozenset((
     "missing-order-proof", "missing-sponsor-proof",
     "foreign-sponsor-proof", "redirect-refund-after-signature",
     "fee-over-cap", "sponsor-insufficient", "sponsor-with-tokens",
-    "wrong-fee-script",
+    "wrong-fee-script", "foreign-sponsor-script",
+    "redirect-refund-before-signing",
 ))
 CANCEL_POSITIVE = "SIGMA607_CANCEL_PASS:two_owner_signatures"
 CANCEL_SERIALIZATION = "SIGMA607_CANCEL_SERIALIZATION_PASS"
 CANCEL_CONSERVATION = "SIGMA607_CANCEL_CONSERVATION_PASS"
-CANCEL_END = "SIGMA607_CANCEL_SYNTHETIC_9_CASES_PASS"
+CANCEL_END = "SIGMA607_CANCEL_SYNTHETIC_11_CASES_PASS"
 CANCEL_SCOPE = "NOT_SYPC_CORE_CONSENSUS_NOT_REAL_LIVENESS_NOT_MINBOX_OR_FEES"
 
 
