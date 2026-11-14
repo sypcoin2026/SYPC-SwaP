@@ -128,7 +128,7 @@ class Native6ReviewTests(unittest.TestCase):
             cancel.write_text(cancel_log_lines())
             result = checker.review(PINS, comp, smoke, signed, cancel)
             self.assertEqual(result["status"], "PASS_SIGMA607_FOUR_LAB_TRACES_ONLY")
-            self.assertEqual(len(result["sponsor_cancel"]["negative_scenarios"]), 8)
+            self.assertEqual(len(result["sponsor_cancel"]["negative_scenarios"]), 10)
             self.assertFalse(result["ready_for_deployment"])
             cancel.write_text("incomplete")
             self.assertEqual(checker.review(PINS, comp, smoke, signed, cancel)["status"],
