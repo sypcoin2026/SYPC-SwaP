@@ -21,6 +21,7 @@ MAIN_CLASS = "org.ergoplatform.sypcoin.SypRewardTestnetLauncher"
 SIGMA_JAR = "sigma-state_2.12-6.0.7.jar"
 CLASS_FILES = {
     "reward_launcher": "org/ergoplatform/sypcoin/SypRewardTestnetLauncher.class",
+    "reward_launcher_module": "org/ergoplatform/sypcoin/SypRewardTestnetLauncher$.class",
     "native_transaction": "org/ergoplatform/modifiers/mempool/ErgoTransaction.class",
     "native_state": "org/ergoplatform/nodeView/state/ErgoState.class",
 }
@@ -28,6 +29,7 @@ MAX_CMDLINE = 262_144
 MAX_CLASSPATH_ITEMS = 512
 MAX_ARTIFACT_BYTES = 1_000_000_000
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
+LAUNCHER_LABELS = frozenset({"reward_launcher", "reward_launcher_module"})
 
 
 class FingerprintError(ValueError):
@@ -151,13 +153,25 @@ def inspect_process(pid: int, proc_root: Path = Path("/proc")) -> dict | None:
         item = fingerprint_artifact(entry)
         if item is not None:
             artifacts.append(item)
-    launchers = [a for a in artifacts if
-                 ("reward_launcher" in a.get("class_labels", []) or
-                  "reward_launcher" in a.get("class_sha256", {}))]
+    launchers = [
+        a for a in artifacts if
+        (LAUNCHER_LABELS.intersection(a.get("class_labels", [])) or
+         LAUNCHER_LABELS.intersection(a.get("class_sha256", {}).keys()))
+    ]
     sigmas = [a["sha256"] for a in artifacts if a.get("is_exact_sigma607_filename")]
+    # Counts only, NEVER a classpath entry, user directory or process argument.
+    # Distinguish missing artifacts from more than one candidate, without
+    # silently accepting the first matching classloader entry.
+    dirs = sum(entry.is_dir() for entry in entries)
+    jars = sum(entry.is_file() and entry.suffix.lower() == ".jar"
+               for entry in entries)
+    missing = sum(not entry.exists() for entry in entries)
     return {
         "pid": pid,
         "classpath_entries": len(entries),
+        "classpath_directories": dirs,
+        "classpath_jar_files": jars,
+        "classpath_missing_entries": missing,
         "launcher_artifacts": launchers,
         "sigma607_sha256": sigmas,
     }
@@ -204,7 +218,21 @@ def main() -> int:
             raise FingerprintError("INVALID_EXPECTED_SIGMA_HASH")
         record = select_process(pid=args.pid)
         if len(record["launcher_artifacts"]) != 1:
-            raise FingerprintError("LAUNCHER_CODE_ARTIFACT_NOT_UNIQUE")
+            # Previous V1 conflated 0 and >1. Publish safe counts only;
+            # everything else continues to fail closed.
+            print("SYPC_REWARD_SAFE_COUNTS:" + json.dumps({
+                "classpath_entries": record["classpath_entries"],
+                "classpath_directories": record["classpath_directories"],
+                "classpath_jar_files": record["classpath_jar_files"],
+                "classpath_missing_entries": record["classpath_missing_entries"],
+                "launcher_candidates": len(record["launcher_artifacts"]),
+                "sigma607_candidates": len(record["sigma607_sha256"]),
+            }, sort_keys=True), file=sys.stderr)
+            raise FingerprintError(
+                "LAUNCHER_CODE_ARTIFACT_MISSING"
+                if not record["launcher_artifacts"]
+                else "MULTIPLE_LAUNCHER_CODE_ARTIFACTS"
+            )
         if len(record["sigma607_sha256"]) != 1:
             raise FingerprintError("SIGMA607_JAR_NOT_UNIQUE")
         if expected and record["sigma607_sha256"][0] != expected:
